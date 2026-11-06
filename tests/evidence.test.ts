@@ -2,6 +2,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
   commandRun,
+  commandRuns,
   fileRole,
   runOutcome,
   verificationSegment,
@@ -88,6 +89,40 @@ describe('verification runs', () => {
       cmd: 'bun test',
       outcome: 'passed',
     });
+  });
+
+  test('every check in a chained command is its own run', () => {
+    // Shape of a captured release check: bundle, tests into a log, then the eval.
+    const runs = commandRuns(
+      'bun run bundle 2>&1 | tail -2; bun test > /tmp/tt.log 2>&1; tail -3 /tmp/tt.log; bun scripts/eval-summaries.ts >/dev/null; grep "checks pass" report.md',
+      false,
+      'Bundled 4 modules\n 71 pass\n 0 fail\n**57/57 checks pass.**',
+    );
+    expect(runs.map((r) => r.kind)).toEqual(['build', 'test', 'eval']);
+    expect(runs[1]).toMatchObject({ outcome: 'passed', summary: ['71 pass', '0 fail'] });
+    expect(runs[2]).toMatchObject({
+      outcome: 'passed',
+      summary: ['**57/57 checks pass.**'],
+    });
+    // The test run no longer carries the eval's result line.
+    expect(runs[1]!.summary.join(' ')).not.toContain('checks');
+    const chained = commandRuns(
+      'bun run bundle 2>&1 | tail -1 && bun x tsc --noEmit && bun test > /tmp/tt.log 2>&1; tail -2 /tmp/tt.log',
+      false,
+      'ok\n 96 pass\n 0 fail',
+    );
+    expect(chained.map((r) => [r.kind, r.cmd])).toEqual([
+      ['build', 'bun run bundle 2>&1'],
+      ['typecheck', 'bun x tsc --noEmit'],
+      ['test', 'bun test > /tmp/tt.log 2>&1'],
+    ]);
+    // A failure in a chain of checks can't be pinned on one of them.
+    expect(
+      commandRuns('bun x tsc --noEmit && bun test', true, '').every(
+        (r) => r.outcome === 'unknown',
+      ),
+    ).toBe(true);
+    expect(commandRuns('bun x tsc --noEmit', true, '')[0]!.outcome).toBe('failed');
   });
 
   test('a silent type check with a hidden status remains unknown', () => {
