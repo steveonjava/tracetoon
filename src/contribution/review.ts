@@ -36,6 +36,7 @@ export function reviewInput(input: {
   changeMap?: boolean;
   changeMapSha256?: string;
   codeSourcesSha256?: string;
+  graphLeads?: ReviewInput['graphLeads'];
 }): ReviewInput {
   const { generatedAt: _time, ...digest } = input.digest;
   const { generatedAt: _fullTime, ...fullDigest } = input.fullDigest ?? input.digest;
@@ -54,6 +55,14 @@ export function reviewInput(input: {
     ...(input.changeMapSha256 ? { changeMapSha256: input.changeMapSha256 } : {}),
     ...(input.codeSourcesSha256 ? { codeSourcesSha256: input.codeSourcesSha256 } : {}),
     ...(input.comic ? { comic: input.comic } : {}),
+    ...(input.graphLeads
+      ? {
+          graphLeads: {
+            unverified: input.graphLeads.unverified.slice(0, 20),
+            unexplained: input.graphLeads.unexplained.slice(0, 20),
+          },
+        }
+      : {}),
   };
   return {
     v: 1,
@@ -72,6 +81,7 @@ export function reviewInput(input: {
       'approval.json',
       ...(input.changeMap ? ['change-map.json'] : []),
       ...(input.codeSourcesSha256 ? ['source-evidence.json'] : []),
+      ...(input.graphLeads ? ['evidence-graph.json'] : []),
       ...(input.comic
         ? ['comic-observation-input.json', input.comic.imagePath, input.comic.scriptPath]
         : []),

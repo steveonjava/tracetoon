@@ -14,6 +14,17 @@ The dependency command prepares the exact Showtail revision in
 existing repository with `--source <path>`; it never builds from its moving
 branch. `build.config.json` records the required Bun version and build recipe.
 
+The evidence graph engine is cypherlite compiled to WebAssembly, vendored as
+`plugin/skills/tracetoon/assets/cypherlite.wasm` plus its glue in
+`src/graph/vendor/`, pinned by tag, revision and SHA-256 in
+`build-dependencies.json`. Builds refuse mismatched bytes
+(`bun scripts/cypherlite.ts check`). To reproduce or bump it, install
+cypherlite's WebAssembly toolchain and run `bun scripts/cypherlite.ts rebuild`
+(add `--update` after changing the pin); the build strips machine paths, so
+the bytes match wherever it runs. `bun scripts/eval-graph.ts [--synthetic]`
+reports what the graph changes for a branch: digest size and fact retention
+per budget, provenance lookup cost, and timings.
+
 ## Layout
 
 | Path | What lives there |
@@ -22,6 +33,7 @@ branch. `build.config.json` records the required Bun version and build recipe.
 | `src/git/` | What the PR is (base, commits, added lines), interop with Entire and git-ai |
 | `src/correlate/` | Which sessions and records belong to this PR, and line attribution |
 | `src/digest/` | The redacted, budgeted digest the agent writes from |
+| `src/graph/` | The evidence graph: built from the digest, trails and patch (`build.ts`), loaded into cypherlite WebAssembly (`engine.ts`), named queries for agents (`queries.ts`), and what Tracetoon derives from it for digests, notes and review (`derive.ts`). `vendor/` is pinned generated code; never edit it |
 | `src/comic/` | Script format, style ideas, bubbles, rasterizing, image providers |
 | `src/github/` | PR body region and metadata, assets branch, repo templates and policy |
 | `src/hook/` | The agent PR hook (`hook pre-pr`), its install/uninstall into each agent's config, and the on/off switches |

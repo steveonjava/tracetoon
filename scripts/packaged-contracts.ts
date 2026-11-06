@@ -30,13 +30,21 @@ export const CHECK_PROGRESS_CONTRACT: PackagedContract = {
   pattern: 'CLI streams check progress while the receipt and lock still indicate running',
   minimum: 1,
 };
+export const EVIDENCE_GRAPH_CONTRACT: PackagedContract = {
+  id: 'evidence-graph-engine',
+  file: 'tests/graph.test.ts',
+  pattern: 'digest links files to prompts and checks, and names later edits',
+  minimum: 1,
+};
 export const NATIVE_CONTRACTS = [
+  EVIDENCE_GRAPH_CONTRACT,
   PUBLICATION_CONTRACT,
   PASSIVE_CREATION_CONTRACT,
   PREPARATION_CONTRACT,
   CHECK_PROGRESS_CONTRACT,
 ];
 export const BUNDLE_CONTRACTS: PackagedContract[] = [
+  EVIDENCE_GRAPH_CONTRACT,
   CHECK_PROGRESS_CONTRACT,
   PREPARATION_CONTRACT,
   {

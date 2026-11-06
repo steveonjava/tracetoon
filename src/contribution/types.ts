@@ -189,6 +189,20 @@ export interface ReviewInput {
   codeSourcesSha256?: string;
   /** Present on new comic renders; absent on legacy packets and comic-free PRs. */
   comic?: { imagePath: string; scriptPath: string; panelCount: number };
+  /**
+   * Leads from the evidence graph: behavior/test files no passing check followed
+   * after their last captured edit, and hunks no captured edit explains. Check the
+   * body makes no verification or attribution claim about them it can't support.
+   */
+  graphLeads?: {
+    unverified: { file: string; why: string }[];
+    unexplained: {
+      diff: string;
+      file: string;
+      commits: string[];
+      removalOnly: boolean;
+    }[];
+  };
   /** Run-relative evidence paths for the reviewer. */
   artifacts: string[];
 }

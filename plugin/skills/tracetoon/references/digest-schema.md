@@ -33,6 +33,10 @@ passing receipt supports only the command and environment that were checked.
 | `sessions[].milestones` | Deterministic events: plan approved, tests went from failing to passing, edits that didn't survive |
 | `sessions[].usage`, `sessionCostUsd` | Token totals for the matched part; cost is for the whole session |
 | `files[]` | Per file: `role` (behavior, tests, docs, config, generated, version), lines added/removed, lines matched to each session, lines not matched to captured evidence |
+| `files[].facts` | Facts (S/D/P) whose turns' edits survive in this file, strongest first. From the evidence graph |
+| `files[].checksAfterLastEdit` | Check runs after the file's last captured edit, latest first (`R4:passed`). Absent: none captured. Historical log evidence, not proof the submitted content passes |
+| `sessions[].runs[].laterEdits` | PR files the session edited after this run: what the run did not see. Qualify a cited result as from before those edits |
+| `graph` | Size of the run's evidence graph (`evidence-graph.json`): nodes, relationships, hunks, hunks linked to an agent edit, edits, dead-end edits |
 | `disclosure` | Agents, models, suggested and existing AI trailers |
 | `interop` | Provenance other tools recorded: Entire checkpoints in commit trailers, git-ai notes |
 | `privacy` | Redaction count and records dropped because they belonged to other repos |
@@ -44,6 +48,29 @@ passing receipt supports only the command and environment that were checked.
 can miss shell writes even inside the same session. It never establishes that
 code stayed unchanged. Historical tested content remains unverified; use current
 matching-content receipts for claims about the submitted content.
+
+## Evidence graph
+
+`digest` also builds `evidence-graph.json`: prompts, decisions, plans, runs,
+edits, files, diff hunks and commits, connected by the turn each happened in,
+the hunks an edit's lines survive in, the files edited after each run, and the
+commits each session made. Ask it with `tracetoon query <name> --run <id>`:
+
+| Query | Answers |
+|---|---|
+| `outline` | Every changed file: role, size, hunks, prompts whose edits survive in it, commits, checks after its last edit |
+| `why <path\|path:line\|H#\|diff:N>` | The turns behind a file or hunk (prompt, decisions, plans, diff refs), its commits and its checks |
+| `verified [path]` / `unverified` | Check runs after each file's last captured edit / behavior and test files with no passing one |
+| `unexplained` | Behavior and test hunks no captured agent edit survives in |
+| `turn <S#>` | What one prompt led to, including dead-end edits |
+| `stale <R#>` | Files edited after a run |
+| `dead-ends`, `pushback` | Abandoned edits; prompts that redirected the agent |
+| `schema`, `--cypher` | The graph's labels and relationships; your own read-only Cypher |
+
+Diff refs (`diff:120-141`) are `changes.patch` line ranges, citable as change-map
+`behaviorChecks` evidence. Graph links are captured evidence: a missing link
+means it was not captured. `graph-review.json` holds the review leads copied
+into `review-input.json` (`graphLeads`).
 
 `digest` also writes `evidence-notes.md` before drafting, separating historical
 checks, current receipts and validation gaps. `expand` accepts session refs,

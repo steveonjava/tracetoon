@@ -99,6 +99,8 @@ export interface Run {
   /** Up to three result lines from the output, e.g. "96 pass", "0 fail". */
   summary: string[];
   revision: 'before later edits' | 'no later edits seen' | 'after later work' | 'unknown';
+  /** PR files the session edited after this run (from the evidence graph): what it did not see. */
+  laterEdits?: string[];
 }
 
 export interface TraceDigest {
@@ -156,6 +158,10 @@ export interface TraceDigest {
     removed: number;
     sessions: { ref: string; lines: number }[];
     unmatchedLines: number;
+    /** Facts whose turns' edits survive in this file, strongest first (evidence graph). */
+    facts?: string[];
+    /** Check runs after the file's last captured edit, latest first, as `R4:passed`. */
+    checksAfterLastEdit?: string[];
   }[];
   disclosure: {
     agents: string[];
@@ -170,6 +176,15 @@ export interface TraceDigest {
   linkedPrs: number[];
   notes: string[];
   truncated: string[];
+  /** Size of this run's evidence graph; ask it questions with `tracetoon query`. */
+  graph?: {
+    nodes: number;
+    rels: number;
+    hunks: number;
+    linkedHunks: number;
+    edits: number;
+    deadEndEdits: number;
+  };
 }
 
 /** Test runners, matched against the program at the start of a command segment. */
@@ -269,21 +284,67 @@ export function commandRun(
   isError: boolean | undefined,
   output: string | undefined,
 ): Omit<Run, 'id' | 't' | 'revision'> | undefined {
-  const verify = verificationSegment(cmd);
-  if (!verify) return undefined;
-  const tests = splitCommands(cmd)
-    .map((s) => s.replace(/^([A-Z_][A-Z0-9_]*=\S*\s+)+/, ''))
-    .filter((s) => TEST_RUNNERS.some((re) => re.test(s)));
-  const result = runOutcome(cmd, verify.seg, isError, output, verify.kind);
-  if (tests.length > 1)
-    return {
-      cmd: tests.join(' ; '),
-      kind: 'test',
-      ...result,
-      outcome: 'unknown',
-      basis: 'none',
-    };
-  return { cmd: verify.seg, kind: verify.kind, ...result };
+  return commandRuns(cmd, isError, output)[0];
+}
+
+/** Output lines that belong to each kind of check, when one command runs several. */
+const KIND_LINE: Partial<Record<Run['kind'], RegExp>> = {
+  test: /(\b\d+\s+(pass|passed|passing|fail|failed|failing)\b|^Tests?:\s|\btest result:)/i,
+  typecheck: /(\bFound \d+ errors?\b|\berror TS\d+)/i,
+  lint: /(All matched files use|\b\d+\s+(errors?|warnings?)\b|\bFound \d+ errors?)/i,
+  build: /(\b\d+\s+(errors?|warnings?)\b|\bBundled\b|\bbuild (failed|succeeded)\b)/i,
+  eval: /\b\d+\/\d+\s+checks?\b/i,
+};
+
+/**
+ * Every verification run in one shell command, in order. Agents chain checks
+ * (`bun run bundle; bun x tsc --noEmit && bun test; bun scripts/eval.ts`), and
+ * each is a run in its own right: recording only one makes the others look
+ * like they never happened. Test commands keep the rule above (one listed run).
+ * With several checks the output is shared, so each run keeps only the result
+ * lines of its own kind, and a failing exit status can't be pinned on one.
+ */
+export function commandRuns(
+  cmd: string,
+  isError: boolean | undefined,
+  output: string | undefined,
+): Omit<Run, 'id' | 't' | 'revision'>[] {
+  const segments = splitCommands(cmd).map((x) =>
+    x.replace(/^([A-Z_][A-Z0-9_]*=\S*\s+)+/, ''),
+  );
+  const tests = segments.filter((s) => TEST_RUNNERS.some((re) => re.test(s)));
+  const found: { seg: string; kind: Run['kind'] }[] = [];
+  let testAdded = false;
+  for (const seg of segments) {
+    if (TEST_RUNNERS.some((re) => re.test(seg))) {
+      if (!testAdded) found.push({ seg, kind: 'test' });
+      testAdded = true;
+      continue;
+    }
+    const hit = VERIFY.find(([, re]) => re.test(seg));
+    if (hit) found.push({ seg, kind: hit[0] });
+  }
+  const several = found.length > 1;
+  return found.map(({ seg, kind }) => {
+    const own = several
+      ? (output ?? '')
+          .split(/\r?\n/)
+          .filter((l) => KIND_LINE[kind]?.test(l) ?? false)
+          .join('\n')
+      : output;
+    const result = runOutcome(cmd, seg, isError, own, kind);
+    if (several && result.basis === 'exit status' && result.outcome === 'failed')
+      Object.assign(result, { outcome: 'unknown', basis: 'none' });
+    if (kind === 'test' && tests.length > 1)
+      return {
+        cmd: tests.join(' ; '),
+        kind,
+        ...result,
+        outcome: 'unknown',
+        basis: 'none',
+      };
+    return { cmd: seg, kind, ...result };
+  });
 }
 
 const RESULT_LINE =
@@ -349,12 +410,42 @@ const AGENT_LABEL: Record<string, string> = {
   'antigravity-ide': 'Antigravity',
 };
 
+/**
+ * What happened in a session, in order, keeping the turn each fact and edit
+ * belongs to. Only the evidence graph reads it; it is never written out, and its
+ * edit lines (normalized PR lines, used to find the hunks an edit survives in)
+ * never leave memory.
+ */
+export type TrailEvent =
+  | { kind: 'prompt'; fact: DigestSession['prompts'][number] }
+  | { kind: 'decision'; fact: DigestSession['decisions'][number] }
+  | { kind: 'plan'; fact: DigestSession['plans'][number] }
+  | { kind: 'run'; fact: Run }
+  | {
+      kind: 'edit';
+      t?: string;
+      /** Repo-relative, redacted. */
+      file: string;
+      inPr: boolean;
+      /** Normalized added lines that are also added by the PR. */
+      lines: string[];
+      added: number;
+      removed: number;
+      via?: 'shell';
+    };
+
+export interface SessionTrail {
+  ref: string;
+  events: TrailEvent[];
+}
+
 function sessionDigest(
   m: SessionMatch,
   ref: string,
   truth: PrTruth,
   prSets: Map<string, Set<string>>,
   scrub: Scrubber,
+  trail: TrailEvent[] = [],
 ): DigestSession {
   const recs = m.kept;
   const models = new Set<string>();
@@ -390,6 +481,7 @@ function sessionDigest(
           ...(r.feedback ? { pushback: true } : {}),
         };
         prompts.push(p);
+        trail.push({ kind: 'prompt', fact: p });
         current = p;
         break;
       }
@@ -404,16 +496,19 @@ function sessionDigest(
         usage.cacheWrite += r.usage.cacheWrite;
         sawUsage = true;
         break;
-      case 'plan':
-        plans.push({
+      case 'plan': {
+        const plan = {
           t: r.ts,
           approved: r.approved,
           excerpt: scrub.text(r.markdown),
-        });
+        };
+        plans.push(plan);
+        trail.push({ kind: 'plan', fact: plan });
         if (r.approved) milestones.push('plan approved');
         break;
-      case 'decision':
-        decisions.push({
+      }
+      case 'decision': {
+        const decision: DigestSession['decisions'][number] = {
           t: r.ts,
           text: scrub.text(r.text),
           ...(r.questions?.length
@@ -430,34 +525,47 @@ function sessionDigest(
                 })),
               }
             : {}),
-        });
+        };
+        decisions.push(decision);
+        trail.push({ kind: 'decision', fact: decision });
         break;
+      }
       case 'edit': {
         const rel = repoRel({ roots: m.roots }, r.file);
         if (rel) files.add(rel);
-        if (current && rel) {
-          const set = prSets.get(rel);
-          if (
-            set &&
-            r.added.some((l) => {
+        const set = rel ? prSets.get(rel) : undefined;
+        const surviving = set
+          ? r.added.flatMap((l) => {
               const e = evidenceLine(l);
-              return !!e && set.has(e);
+              return e && set.has(e) ? [e] : [];
             })
-          )
-            current.ledToEdits = true;
-        }
+          : [];
+        if (current && surviving.length) current.ledToEdits = true;
+        if (rel)
+          trail.push({
+            kind: 'edit',
+            t: r.ts,
+            file: scrub.text(rel),
+            inPr: !!set,
+            lines: surviving,
+            added: r.added.length,
+            removed: r.removed.length,
+            ...(r.via ? { via: r.via } : {}),
+          });
         break;
       }
       case 'command': {
-        const run = commandRun(r.cmd, r.isError, r.output);
-        if (run)
-          runs.push({
+        for (const run of commandRuns(r.cmd, r.isError, r.output)) {
+          const fact: Run = {
             t: r.ts,
             ...run,
             cmd: scrub.text(run.cmd),
             summary: run.summary.map((line) => scrub.text(line)),
             revision: 'unknown',
-          });
+          };
+          runs.push(fact);
+          trail.push({ kind: 'run', fact });
+        }
         const seg = testSegment(r.cmd);
         const test = seg !== undefined;
         const key = clip(scrub.text(commandKey(seg ?? r.cmd)), 60);
@@ -550,13 +658,53 @@ function sessionDigest(
 
 const estimateTokens = (o: unknown) => Math.ceil(JSON.stringify(o).length / 4);
 
-/** Trim the digest until it fits the token budget, least important content first. */
-function fitBudget(d: TraceDigest, budget: number): void {
+/** Fact id → how much of the PR it explains (from the evidence graph). */
+export type Relevance = Record<string, number>;
+
+/** The `n` most relevant runs (newest first among equals), in their original order. */
+function topRuns(runs: Run[], relevance: Relevance, n: number): Run[] {
+  const keep = new Set(
+    runs
+      .map((r, i) => ({ r, i }))
+      .sort(
+        (a, b) =>
+          (relevance[b.r.id ?? ''] ?? 0) - (relevance[a.r.id ?? ''] ?? 0) || b.i - a.i,
+      )
+      .slice(0, n)
+      .map((x) => x.r),
+  );
+  return runs.filter((r) => keep.has(r));
+}
+
+/**
+ * Trim the digest until it fits the token budget, least important content first.
+ * With relevance from the evidence graph, facts that explain more of the PR keep
+ * more text and runs are kept by relevance rather than recency.
+ */
+function fitBudget(d: TraceDigest, budget: number, relevance?: Relevance): void {
+  const rel = (id?: string) => (id && relevance ? (relevance[id] ?? 0) : 0);
+  const median = (() => {
+    if (!relevance) return 0;
+    const v = d.sessions
+      .flatMap((s) => s.prompts.map((p) => rel(p.id)))
+      .sort((a, b) => a - b);
+    return v.length ? v[Math.floor(v.length / 2)]! : 0;
+  })();
   const steps: [string, () => boolean][] = [
-    [
-      'plan excerpts shortened to 600 chars',
-      () => shrink((s) => s.plans.forEach((p) => (p.excerpt = clip(p.excerpt, 600)))),
-    ],
+    relevance
+      ? [
+          'plan excerpts shortened to 600 chars (200 for plans from turns with no surviving edits)',
+          () =>
+            shrink((s) =>
+              s.plans.forEach(
+                (p) => (p.excerpt = clip(p.excerpt, rel(p.id) > 1 ? 600 : 200)),
+              ),
+            ),
+        ]
+      : [
+          'plan excerpts shortened to 600 chars',
+          () => shrink((s) => s.plans.forEach((p) => (p.excerpt = clip(p.excerpt, 600)))),
+        ],
     [
       'prompts that led to no surviving edits dropped',
       () =>
@@ -567,10 +715,24 @@ function fitBudget(d: TraceDigest, budget: number): void {
             )),
         ),
     ],
-    [
-      'prompts shortened to 200 chars',
-      () => shrink((s) => s.prompts.forEach((p) => (p.text = clip(p.text, 200)))),
-    ],
+    relevance
+      ? [
+          'prompts shortened to 260 chars (140 for prompts that explain less of the PR)',
+          () => {
+            const high = (p: DigestSession['prompts'][number]) =>
+              !!p.pushback || (rel(p.id) > 0 && rel(p.id) >= median);
+            const signal = d.sessions.some((s) => s.prompts.some(high));
+            return shrink((s) =>
+              s.prompts.forEach(
+                (p) => (p.text = clip(p.text, !signal ? 200 : high(p) ? 260 : 140)),
+              ),
+            );
+          },
+        ]
+      : [
+          'prompts shortened to 200 chars',
+          () => shrink((s) => s.prompts.forEach((p) => (p.text = clip(p.text, 200)))),
+        ],
     [
       'artifact excerpts shortened to 500 chars',
       () => shrink((s) => s.artifacts.forEach((a) => (a.excerpt = clip(a.excerpt, 500)))),
@@ -589,10 +751,15 @@ function fitBudget(d: TraceDigest, budget: number): void {
         return true;
       },
     ],
-    [
-      'runs limited to the last 10 per session',
-      () => shrink((s) => (s.runs = s.runs.slice(-10))),
-    ],
+    relevance
+      ? [
+          'runs limited to the 10 most relevant per session (final run of each command, runs no later edit followed)',
+          () => shrink((s) => (s.runs = topRuns(s.runs, relevance, 10))),
+        ]
+      : [
+          'runs limited to the last 10 per session',
+          () => shrink((s) => (s.runs = s.runs.slice(-10))),
+        ],
     [
       'commands limited to 5 per session',
       () => shrink((s) => (s.commands = s.commands.slice(0, 5))),
@@ -618,13 +785,19 @@ function fitBudget(d: TraceDigest, budget: number): void {
  * A forked or resumed session repeats its parent's history. Keep each prompt, plan
  * and decision only in the highest-scoring session that has it.
  */
-function dedupeAcrossSessions(sessions: DigestSession[]): void {
-  const seen = new Set<string>();
+function dedupeAcrossSessions(sessions: DigestSession[]): Map<object, object> {
+  const seen = new Map<string, object>();
+  /** Each dropped repeat, mapped to the copy that was kept. */
+  const alias = new Map<object, object>();
   const fresh = <T extends { t?: string }>(items: T[], text: (x: T) => string): T[] =>
     items.filter((x) => {
       const k = `${x.t ?? ''}|${text(x)}`;
-      if (seen.has(k)) return false;
-      seen.add(k);
+      const kept = seen.get(k);
+      if (kept) {
+        alias.set(x, kept);
+        return false;
+      }
+      seen.set(k, x);
       return true;
     });
   for (const s of sessions) {
@@ -633,6 +806,7 @@ function dedupeAcrossSessions(sessions: DigestSession[]): void {
     s.plans = fresh(s.plans, (p) => p.excerpt);
     s.decisions = fresh(s.decisions, (p) => p.text);
   }
+  return alias;
 }
 
 /** Give prompts, decisions, plans and runs short ids (S1, D1, P1, R1) the text can cite. */
@@ -655,6 +829,8 @@ export interface BuildOptions {
   exclude?: string[];
   /** Provenance already read for this truth; building twice need not ask git again. */
   interop?: Interop;
+  /** Receives each chosen session's ordered trail, for the evidence graph. */
+  trails?: SessionTrail[];
 }
 
 function buildFullDigest(
@@ -677,14 +853,32 @@ function buildFullDigest(
   const refOf = new Map(
     chosen.map((m) => [m.session.sessionId, hashId(salt, m.session.sessionId)]),
   );
+  const trails: SessionTrail[] = [];
   const sessions = chosen.map((m) => {
-    const s = sessionDigest(m, refOf.get(m.session.sessionId)!, truth, prSets, scrub);
+    const events: TrailEvent[] = [];
+    const s = sessionDigest(
+      m,
+      refOf.get(m.session.sessionId)!,
+      truth,
+      prSets,
+      scrub,
+      events,
+    );
+    trails.push({ ref: s.ref, events });
     if (opts.include?.some((x) => x === s.ref || x === m.session.sessionId))
       s.band = 'included';
     return s;
   });
-  dedupeAcrossSessions(sessions);
+  const alias = dedupeAcrossSessions(sessions);
   numberFacts(sessions);
+  if (opts.trails) {
+    // A resumed session repeats its parent's prompts; point its events at the kept copy.
+    for (const t of trails)
+      for (const e of t.events)
+        if (e.kind !== 'edit' && alias.has(e.fact))
+          (e as { fact: object }).fact = alias.get(e.fact)!;
+    opts.trails.push(...trails);
+  }
   const full = opts.full || opts.budgetTokens === Number.MAX_SAFE_INTEGER;
   if (!full)
     for (const s of sessions) {
@@ -771,7 +965,7 @@ function buildFullDigest(
       title: truth.pr ? scrub.text(truth.pr.title) : undefined,
       base: truth.base,
       head: truth.head,
-      mergeBase: truth.mergeBase.slice(0, 12),
+      mergeBase: truth.mergeBase,
       usedWorkingTree: truth.usedWorkingTree,
       ...(truth.dirty ? { dirty: true } : {}),
       commits: truth.commits.map((c) => ({
@@ -836,7 +1030,11 @@ function buildFullDigest(
 }
 
 /** Project from independent redacted data; budgeting must never trim expansion evidence. */
-export function compactDigest(full: TraceDigest, budgetTokens = 12000): TraceDigest {
+export function compactDigest(
+  full: TraceDigest,
+  budgetTokens = 12000,
+  relevance?: Relevance,
+): TraceDigest {
   const digest = structuredClone(full);
   for (const s of digest.sessions) {
     s.prompts.forEach((p) => (p.text = clip(p.text, 400)));
@@ -849,27 +1047,35 @@ export function compactDigest(full: TraceDigest, budgetTokens = 12000): TraceDig
         if (q.answer !== undefined) q.answer = clip(q.answer, 400);
       });
     });
-    s.runs = s.runs.slice(-25);
+    s.runs = relevance ? topRuns(s.runs, relevance, 25) : s.runs.slice(-25);
   }
   digest.pr.commits = digest.pr.commits.map((c) => ({
     ...c,
     sha: c.sha.slice(0, 12),
     ...(c.body ? { body: clip(c.body, 1200) } : {}),
   }));
-  fitBudget(digest, budgetTokens);
+  fitBudget(digest, budgetTokens, relevance);
   return digest;
 }
 
 export function buildDigestPair(
   truth: PrTruth,
   matches: SessionMatch[],
-  opts: BuildOptions = {},
+  opts: BuildOptions & {
+    /**
+     * Called with the full digest and session trails before projection: builds the
+     * evidence graph, annotates the full digest and returns fact relevance.
+     */
+    enrich?: (full: TraceDigest, trails: SessionTrail[]) => Relevance | undefined;
+  } = {},
 ) {
   const start = performance.now();
-  const full = buildFullDigest(truth, matches, { ...opts, full: true });
+  const trails: SessionTrail[] = [];
+  const full = buildFullDigest(truth, matches, { ...opts, full: true, trails });
+  const relevance = opts.enrich?.(full, trails);
   const extractionMs = performance.now() - start;
   const projectionStart = performance.now();
-  const digest = compactDigest(full, opts.budgetTokens);
+  const digest = compactDigest(full, opts.budgetTokens, relevance);
   return {
     digest,
     full,

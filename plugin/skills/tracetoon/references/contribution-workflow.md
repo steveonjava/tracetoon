@@ -5,6 +5,9 @@ the CLI does not start another model or need model credentials. Use the current
 host's actual delegation tool when available. Record actual invocation ids, not
 persona names. If delegation is unavailable, perform each phase sequentially with
 `mode: "inline"`; the render output must say inline draft / self-review.
+Drafting inline, you follow the drafter prompt below yourself, including its
+evidence-graph steps (`tracetoon query outline`, then `query why` per behavior
+file); they apply to whoever drafts, not only to a delegated drafter.
 
 Start each role in a fresh context when supported. Pass its focused packet from
 `role-packets.json`; use batch evidence expansion instead of copying full transcripts.
@@ -124,6 +127,22 @@ existing rendering. Human-only sections must never be filled in by an agent.
 > For combined shell invocations, expand the full command and output and map
 > each outcome to its producing command. Keep receipt metadata in the local map;
 > draft concrete commands and results without general verification assurances.
+>
+> Start with the run's evidence graph, and use it as an index into the
+> evidence, not a replacement for reading it. `tracetoon query outline --run <id>`
+> lists every changed file with the prompts whose edits survive in it, the
+> commits that touched it and the checks run after its last captured edit, then
+> every commit, marking those with a message body. `query why <path>` gives the
+> turns behind a file (prompt ids, that turn's decisions and plans), every hunk
+> as a diff ref (`diff:120-141`) with whether a captured edit explains it, and
+> the commits that touched it with their bodies. Read every behavior hunk and
+> cite them as behaviorChecks evidence; expand every commit with a body, because
+> commit messages often hold the motivation. `query turn <S#>` shows what one
+> request led to, including dead-end edits. Do not describe a file in
+> `query unverified` as tested or verified. Graph links are captured evidence; a
+> missing link means not captured, not absent. Before writing that a check was
+> not run, expand the session's commands: a chained command can hold several
+> checks.
 
 ### change-map.json (local, never posted)
 
@@ -309,6 +328,17 @@ MSR 2026). The review has three passes:
    would contradict it, not only one that agrees. Cite `diff:`, `digest:` or
    `author:` evidence; only `unsupported` may have none.
 
+   Also read `graphLeads` in review-input.json: behavior and test files no
+   passing check followed after their last captured edit, and hunks no captured
+   edit explains. In the claim audit, a verification claim that covers an
+   unverified file is not `supported`, and a user request or agent session
+   credited with an unexplained hunk needs other evidence (a commit explanation,
+   `author.md`). Use `tracetoon query why <path|H#> --run <id>` to check who
+   asked for a change and `query stale <R#>` to see which files a cited run
+   did not see. Leads are where to look, not findings: do not ask the drafter
+   to say a check was not run until the session's raw commands confirm it.
+   In correction rounds, every new or changed claim about conditional behavior
+   (what happens when an option is or isn't given) needs its own `diff:` ref.
 3. **Coverage.** List significant behavior the diff changes that the body
    omits or misdescribes, with `diff:` evidence. Use `change-map.json`, when
    present, including its within-file `behaviorChecks`, as a list of what to look

@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
+import { graphEngineAvailable } from '../graph/engine.ts';
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { hostHome } from '@showtail/agent-traces/paths/hostHome';
@@ -195,6 +196,7 @@ export function doctor(
     ...(opts.probe ? { unknownRecordTypes: probe() } : {}),
     imageProviders: routeStatuses(top.ok ? top.stdout.trim() : undefined),
     push: top.ok && ghAuth ? (pushAccess(cwd) ?? null) : null,
+    evidenceGraph: graphEngineAvailable(),
   };
   const comics = nextStep(
     report.imageProviders,
@@ -206,6 +208,7 @@ export function doctor(
       `${report.tool} on ${runtime}`,
       `git ${gitV ?? 'not found'} | gh ${ghV ?? 'not found'} (signed in: ${yes(ghAuth)}, --attach: ${yes(report.ghAttach)})`,
       `repo: ${report.repo ?? 'not inside a git repository'}`,
+      `evidence graph: ${report.evidenceGraph.ok ? 'ready (cypherlite, WebAssembly)' : `unavailable: ${report.evidenceGraph.reason}`}`,
       'agents:',
       ...report.agents.map(
         (a) =>

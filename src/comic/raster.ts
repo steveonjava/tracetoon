@@ -4,29 +4,11 @@
  * `assets/` folder.
  */
 import { existsSync, readFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { initWasm, Resvg } from '@resvg/resvg-wasm';
+import { assetsDir } from '../util/assets.ts';
 
-/** The skill's assets folder, wherever Tracetoon is running from. */
-export function assetsDir(): string | undefined {
-  const here = (() => {
-    try {
-      return dirname(fileURLToPath(import.meta.url));
-    } catch {
-      return process.cwd();
-    }
-  })();
-  const candidates = [
-    process.env.TRACETOON_ASSETS,
-    join(here, '..', 'assets'), // dist/tracetoon.mjs → assets
-    join(dirname(process.execPath), '..', 'assets'), // compiled binary in bin/
-    join(dirname(process.execPath), 'assets'),
-    join(here, '..', '..', 'plugin', 'skills', 'tracetoon', 'assets'), // src/comic → repo
-    join(process.argv[1] ? dirname(resolve(process.argv[1])) : here, '..', 'assets'),
-  ].filter((p): p is string => !!p);
-  return candidates.find((p) => existsSync(join(p, 'resvg.wasm')));
-}
+export { assetsDir };
 
 let ready: Promise<void> | undefined;
 

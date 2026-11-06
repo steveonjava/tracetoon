@@ -17,7 +17,8 @@ import {
   reviewLine,
   reviewSummary,
 } from '../contribution/review.ts';
-import type { GuidanceRequest } from '../contribution/types.ts';
+import type { GuidanceRequest, ReviewInput } from '../contribution/types.ts';
+import { graphOutline, loadGraph, loadGraphReview } from '../graph/evidence.ts';
 import {
   existsSync,
   readdirSync,
@@ -373,6 +374,7 @@ export function renderCmd(cwd: string, opts: RenderOpts): Approval {
       existsSync(join(truth.toplevel, path)),
   });
   writeJson(run, 'change-map-checks.json', changeMapFindings);
+  const graphLeads = loadGraphReview(run);
   const reviewPacket = reviewInput({
     title,
     body,
@@ -388,6 +390,7 @@ export function renderCmd(cwd: string, opts: RenderOpts): Approval {
     ...(readJson(run, 'source-evidence.json')
       ? { codeSourcesSha256: objectHash(readJson(run, 'source-evidence.json')) }
       : {}),
+    ...(graphLeads ? { graphLeads } : {}),
     ...(comic && script
       ? {
           comic: {
@@ -431,7 +434,11 @@ export function renderCmd(cwd: string, opts: RenderOpts): Approval {
   const writeYourself =
     ctx.aiPolicy.text === 'prohibited' ||
     ctx.aiPolicy.text === 'author-written-recommended';
-  const outline = evidenceNotes(readJson<TraceDigest>(run, 'digest-full.json') ?? digest);
+  const storedGraph = loadGraph(run);
+  const outline = evidenceNotes(
+    readJson<TraceDigest>(run, 'digest-full.json') ?? digest,
+    storedGraph ? graphOutline(storedGraph) : undefined,
+  );
   writeFileSync(join(run.dir, 'evidence-notes.md'), outline, 'utf8');
   writeJson(run, 'approval.json', approval);
   for (const legacy of ['preview.html', 'review-state.json'])
@@ -443,6 +450,10 @@ export function renderCmd(cwd: string, opts: RenderOpts): Approval {
   }
 
   const stale = digestStale(truth.toplevel, digest);
+  const graphHint =
+    digest.graph && !graphQueried(run)
+      ? 'The evidence graph was not queried in this run. Run `tracetoon query outline`, then `tracetoon query why <path>` for each behavior file, check the draft against what they show, and render again.'
+      : undefined;
   emit(
     opts,
     {
@@ -459,6 +470,7 @@ export function renderCmd(cwd: string, opts: RenderOpts): Approval {
       ...(leakBlocks(approval) ? { leakNotice: leakNotice(approval) } : {}),
       changeMap: changeMapFindings,
       ...(titleNote ? { titleNote } : {}),
+      ...(graphHint ? { graphHint } : {}),
       claims: {
         ...claimSummary(claims),
         findings: claims.filter(
@@ -483,6 +495,8 @@ export function renderCmd(cwd: string, opts: RenderOpts): Approval {
         titleNote ? `Note: ${titleNote}` : '',
         titleLine(titleFindings),
         claimLine(claims),
+        graphLine(graphLeads),
+        graphHint ? `Evidence graph: ${graphHint}` : '',
         changeMapFindings.length
           ? `Change map (advisory):\n${changeMapFindings.map((f) => `  - ${f.text}`).join('\n')}`
           : '',
@@ -505,6 +519,21 @@ export function renderCmd(cwd: string, opts: RenderOpts): Approval {
         .join('\n'),
   );
   return approval;
+}
+
+/** Whether any `tracetoon query` ran against this run (from its profile log). */
+function graphQueried(run: { dir: string }): boolean {
+  try {
+    return readFileSync(join(run.dir, 'profiles.jsonl'), 'utf8')
+      .split('\n')
+      .some((line) => {
+        if (!line.trim()) return false;
+        const p = JSON.parse(line) as { counters?: Record<string, number> };
+        return (p.counters?.['graph.queries'] ?? 0) > 0;
+      });
+  } catch {
+    return false;
+  }
 }
 
 /** What the repo's AI policy means for this PR, in a few lines. */
@@ -530,6 +559,26 @@ function policyLines(policy: AiPolicy, mediaBanned: boolean): string {
   for (const i of policy.prInstructions ?? [])
     out.push(`Repo instruction (${i.file}:${i.line}): ${i.text}`);
   return out.join('\n');
+}
+
+/** What the evidence graph wants the reviewer to look at, in one or two lines. */
+function graphLine(leads: ReviewInput['graphLeads'] | undefined): string {
+  if (!leads || (!leads.unverified.length && !leads.unexplained.length)) return '';
+  const parts = [
+    leads.unverified.length
+      ? `${leads.unverified.length} behavior/test file(s) with no passing check after their last captured edit (${leads.unverified
+          .slice(0, 3)
+          .map((u) => u.file)
+          .join(', ')}${leads.unverified.length > 3 ? ', …' : ''})`
+      : '',
+    leads.unexplained.length
+      ? `${leads.unexplained.length} hunk(s) no captured agent edit explains (${leads.unexplained
+          .slice(0, 3)
+          .map((u) => u.diff)
+          .join(', ')}${leads.unexplained.length > 3 ? ', …' : ''})`
+      : '',
+  ].filter(Boolean);
+  return `Evidence graph (advisory): ${parts.join('; ')}. The reviewer checks the body claims nothing about these it can't support; details: tracetoon query unverified|unexplained.`;
 }
 
 /** One advisory line about the claim check, with the claims worth a look. */

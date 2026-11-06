@@ -290,7 +290,7 @@ function checkVerification(
         s,
         'verification',
         'not established',
-        `${stale.id} ${expected}, but files in the PR changed afterwards; qualify it as a historical result.`,
+        staleDetail(stale, expected, input.digest.files),
         ids,
       );
     const dirty =
@@ -467,6 +467,24 @@ function checkReferences(s: string, input: ClaimInput): ClaimFinding[] {
       );
   }
   return out;
+}
+
+/** Which files a run did not see, from the evidence graph, so the text can qualify precisely. */
+function staleDetail(
+  run: Run,
+  expected: string,
+  files: ClaimInput['digest']['files'],
+): string {
+  const later = run.laterEdits ?? [];
+  if (!later.length)
+    return `${run.id} ${expected}, but files in the PR changed afterwards; qualify it as a historical result.`;
+  const roles = later.map((p) => files.find((f) => f.path === p)?.role ?? 'behavior');
+  const shown =
+    later.length > 3
+      ? `${later.slice(0, 3).join(', ')} and ${later.length - 3} more`
+      : later.join(', ');
+  const docsOnly = roles.every((r) => r === 'docs');
+  return `${run.id} ${expected}, but ${shown} changed afterwards${docsOnly ? ' (documentation only)' : ''}; qualify it as a result from before ${later.length === 1 ? 'that edit' : 'those edits'}, or cite a later run.`;
 }
 
 const finding = (

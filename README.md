@@ -205,6 +205,17 @@ stalled check. Interrupted checks do not establish a passing result.
    with how that run relates to later edits. Everything is redacted: secrets,
    personal data, your home path and username. Sessions that may not belong to
    the PR are left out and counted in the message after the PR.
+   It also builds the run's **evidence graph** (`evidence-graph.json`): each
+   prompt linked to the edits made in its turn, each edit to the diff hunks its
+   lines survive in, each run to the files edited after it, each commit to the
+   session that made it. Tracetoon uses it to say which request and which
+   checks are behind every changed file, to name the files a cited test run
+   didn't see, and to trim the digest by relevance instead of recency. Your
+   agent asks it questions with `tracetoon query` (`outline`, `why <path>`,
+   `unverified`, …) instead of reading every fact and the whole patch. The
+   graph runs in-process on [cypherlite](https://github.com/neo4j-labs/cypherlite)
+   compiled to WebAssembly: no native modules, no database file, and the
+   digest is still written if it can't start.
 3. **`tracetoon context`** reads the PR template, AI policies and agent
    instructions, any existing PR (and edits made to it on GitHub), your
    settings, and the art styles of the repo's recent comics. It also prepares

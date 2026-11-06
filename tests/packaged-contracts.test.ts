@@ -44,6 +44,7 @@ test('package contracts are unique and keep the important runtime boundaries', (
     'runtime-selection',
     'hook-protocol',
     'code-freshness',
+    'evidence-graph-engine',
   ])
     expect(BUNDLE_CONTRACTS.some((c) => c.id === id)).toBe(true);
 });

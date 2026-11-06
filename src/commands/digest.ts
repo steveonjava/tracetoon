@@ -25,6 +25,12 @@ import { evidenceNotes } from '../digest/notes.ts';
 import { repository, workFingerprint } from '../workflow/state.ts';
 import type { Run } from '../run.ts';
 import { count } from '../util/profile.ts';
+import {
+  graphEnricher,
+  graphOutline,
+  saveGraph,
+  type GraphOutcome,
+} from '../graph/evidence.ts';
 
 export interface ScanOpts extends OutOpts {
   base?: string;
@@ -92,10 +98,12 @@ export function digestCmd(
   };
   // Both digests describe the same truth; read its provenance once.
   const interop = detectInterop(truth);
+  const graph: GraphOutcome = {};
   const { digest, full, extractionMs, projectionMs } = buildDigestPair(truth, matches, {
     ...build,
     interop,
     budgetTokens: opts.budget ?? config.budgetTokens,
+    enrich: graphEnricher(truth, graph),
   });
   try {
     recordTiming(run, 'digest-extraction', extractionMs);
@@ -165,7 +173,9 @@ export function digestCmd(
   writeJson(run, 'session-selection.json', build);
   const path = writeJson(run, 'digest.json', digest);
   writeJson(run, 'digest-full.json', full);
-  writeFileSync(join(run.dir, 'evidence-notes.md'), evidenceNotes(full), 'utf8');
+  saveGraph(run, graph);
+  const outline = graph.graph ? graphOutline(graph.graph) : undefined;
+  writeFileSync(join(run.dir, 'evidence-notes.md'), evidenceNotes(full, outline), 'utf8');
   const captured = submissionSnapshot(truth);
   writeJson(run, 'submission.json', captured);
   const ambiguous = digest.sessions.filter((s) => s.band === 'ambiguous');
@@ -205,7 +215,7 @@ export function digestCmd(
           .filter(Boolean)
           .join('\n'),
     );
-  return { truth, run, digest, full, captured };
+  return { truth, run, digest, full, captured, graph: graph.graph, outline };
 }
 
 export function expandCmd(
@@ -339,6 +349,15 @@ export function contextCmd(
 }
 
 /** One immutable preparation snapshot shared by digest and contributor research. */
+/**
+ * The first drafting step, printed where every drafter looks: agents that
+ * write the description themselves often go from `prepare` straight to the
+ * body, past the skill's drafter instructions.
+ */
+export function graphNext(run: string): string {
+  return `before drafting, map the change with the evidence graph: \`tracetoon query outline --run ${run}\`, then \`tracetoon query why <path> --run ${run}\` for each behavior file. Then read every behavior hunk it lists and expand commits marked with a message body.`;
+}
+
 export function prepareCmd(cwd: string, opts: DigestOpts) {
   const repo = repository(cwd);
   const before = workFingerprint(repo.root);
@@ -379,14 +398,25 @@ export function prepareCmd(cwd: string, opts: DigestOpts) {
       'evidence-notes.md',
       'change-map.json',
     ],
+    graph: prepared.graph
+      ? {
+          path: 'evidence-graph.json',
+          stats: prepared.graph.stats,
+          drafter: ['outline', 'why <path>', 'turn <S#>', 'unverified'],
+          reviewer: ['unverified', 'unexplained', 'why <path|H#>', 'stale <R#>'],
+        }
+      : null,
     instructions:
-      'Use fresh role contexts where supported. Read the cold-read packet before the reviewer evidence. Expand referenced evidence in batches; missing evidence remains unknown.',
+      'Use fresh role contexts where supported. Read the cold-read packet before the reviewer evidence. Expand referenced evidence in batches; missing evidence remains unknown. Drafter and reviewer: ask the evidence graph with `tracetoon query <name> --run <id>` (start with `outline`) before reading the whole patch; its diff refs are citable as change-map behaviorChecks evidence.',
   };
   writeJson(prepared.run, 'role-packets.json', roles);
   emit(
     opts,
     {
       run: prepared.run.id,
+      ...(prepared.graph ? { next: graphNext(prepared.run.id) } : {}),
+      // One JSON line, so piping through `head` still shows the whole map.
+      ...(prepared.outline ? { graphOutline: prepared.outline } : {}),
       runDir: prepared.run.dir,
       rolePackets: join(prepared.run.dir, 'role-packets.json'),
       digestPath: join(prepared.run.dir, 'digest.json'),
@@ -394,7 +424,13 @@ export function prepareCmd(cwd: string, opts: DigestOpts) {
       ...context.context.contribution,
     },
     () =>
-      `Run ${prepared.run.id}: digest, context and role-packets.json prepared from one snapshot.`,
+      [
+        `Run ${prepared.run.id}: digest, context and role-packets.json prepared from one snapshot.`,
+        prepared.graph ? `Next: ${graphNext(prepared.run.id)}` : '',
+        prepared.outline ? `Evidence graph outline:\n${prepared.outline}` : '',
+      ]
+        .filter(Boolean)
+        .join('\n'),
   );
   return prepared;
 }

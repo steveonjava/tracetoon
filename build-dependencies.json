@@ -4,5 +4,23 @@
     "repository": "https://github.com/Tingsters/Showtail.git",
     "revision": "dd0b6f40a09e206c1571a0440f2bdc2b78222c18",
     "packageTree": "6eb00aad7a5c9aa7d54b6dbe3bdb1cd4cb17957e"
+  },
+  "cypherlite": {
+    "repository": "https://github.com/neo4j-labs/cypherlite.git",
+    "tag": "v0.16.1",
+    "revision": "45407f581ae3754306f1b1307501e171a8de07cc",
+    "license": "Apache-2.0",
+    "build": {
+      "script": "scripts/build-wasm.sh --mode release",
+      "rust": "1.88.0",
+      "wasmBindgen": "0.2.128",
+      "binaryen": "133"
+    },
+    "files": {
+      "plugin/skills/tracetoon/assets/cypherlite.wasm": "bde61fdee15fad15c4b57973914a0667fe28567cb88379a071eb48dfa3e108ee",
+      "src/graph/vendor/cypherlite.js": "2117cd5a625009b4f726d9bf178293115914067c668c6e96a8f43337ba321f0c",
+      "src/graph/vendor/cypherlite.d.ts": "7d314b5311aac6d9aced29a0db7941cce019f0076331857eb4c8dd2ba7bf89e4",
+      "src/graph/vendor/snippets/cypherlite-wasm-417cb0e10937804e/js/opfs.js": "4bcd237730d3cd8e9674bb2999a6403fd9138b2f237de2739f52171eb1532d12"
+    }
   }
 }
