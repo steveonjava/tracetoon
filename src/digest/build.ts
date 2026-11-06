@@ -269,21 +269,67 @@ export function commandRun(
   isError: boolean | undefined,
   output: string | undefined,
 ): Omit<Run, 'id' | 't' | 'revision'> | undefined {
-  const verify = verificationSegment(cmd);
-  if (!verify) return undefined;
-  const tests = splitCommands(cmd)
-    .map((s) => s.replace(/^([A-Z_][A-Z0-9_]*=\S*\s+)+/, ''))
-    .filter((s) => TEST_RUNNERS.some((re) => re.test(s)));
-  const result = runOutcome(cmd, verify.seg, isError, output, verify.kind);
-  if (tests.length > 1)
-    return {
-      cmd: tests.join(' ; '),
-      kind: 'test',
-      ...result,
-      outcome: 'unknown',
-      basis: 'none',
-    };
-  return { cmd: verify.seg, kind: verify.kind, ...result };
+  return commandRuns(cmd, isError, output)[0];
+}
+
+/** Output lines that belong to each kind of check, when one command runs several. */
+const KIND_LINE: Partial<Record<Run['kind'], RegExp>> = {
+  test: /(\b\d+\s+(pass|passed|passing|fail|failed|failing)\b|^Tests?:\s|\btest result:)/i,
+  typecheck: /(\bFound \d+ errors?\b|\berror TS\d+)/i,
+  lint: /(All matched files use|\b\d+\s+(errors?|warnings?)\b|\bFound \d+ errors?)/i,
+  build: /(\b\d+\s+(errors?|warnings?)\b|\bBundled\b|\bbuild (failed|succeeded)\b)/i,
+  eval: /\b\d+\/\d+\s+checks?\b/i,
+};
+
+/**
+ * Every verification run in one shell command, in order. Agents chain checks
+ * (`bun run bundle; bun x tsc --noEmit && bun test; bun scripts/eval.ts`), and
+ * each is a run in its own right: recording only one makes the others look
+ * like they never happened. Test commands keep the rule above (one listed run).
+ * With several checks the output is shared, so each run keeps only the result
+ * lines of its own kind, and a failing exit status can't be pinned on one.
+ */
+export function commandRuns(
+  cmd: string,
+  isError: boolean | undefined,
+  output: string | undefined,
+): Omit<Run, 'id' | 't' | 'revision'>[] {
+  const segments = splitCommands(cmd).map((x) =>
+    x.replace(/^([A-Z_][A-Z0-9_]*=\S*\s+)+/, ''),
+  );
+  const tests = segments.filter((s) => TEST_RUNNERS.some((re) => re.test(s)));
+  const found: { seg: string; kind: Run['kind'] }[] = [];
+  let testAdded = false;
+  for (const seg of segments) {
+    if (TEST_RUNNERS.some((re) => re.test(seg))) {
+      if (!testAdded) found.push({ seg, kind: 'test' });
+      testAdded = true;
+      continue;
+    }
+    const hit = VERIFY.find(([, re]) => re.test(seg));
+    if (hit) found.push({ seg, kind: hit[0] });
+  }
+  const several = found.length > 1;
+  return found.map(({ seg, kind }) => {
+    const own = several
+      ? (output ?? '')
+          .split(/\r?\n/)
+          .filter((l) => KIND_LINE[kind]?.test(l) ?? false)
+          .join('\n')
+      : output;
+    const result = runOutcome(cmd, seg, isError, own, kind);
+    if (several && result.basis === 'exit status' && result.outcome === 'failed')
+      Object.assign(result, { outcome: 'unknown', basis: 'none' });
+    if (kind === 'test' && tests.length > 1)
+      return {
+        cmd: tests.join(' ; '),
+        kind,
+        ...result,
+        outcome: 'unknown',
+        basis: 'none',
+      };
+    return { cmd: seg, kind, ...result };
+  });
 }
 
 const RESULT_LINE =
@@ -449,8 +495,7 @@ function sessionDigest(
         break;
       }
       case 'command': {
-        const run = commandRun(r.cmd, r.isError, r.output);
-        if (run)
+        for (const run of commandRuns(r.cmd, r.isError, r.output))
           runs.push({
             t: r.ts,
             ...run,
@@ -771,7 +816,7 @@ function buildFullDigest(
       title: truth.pr ? scrub.text(truth.pr.title) : undefined,
       base: truth.base,
       head: truth.head,
-      mergeBase: truth.mergeBase.slice(0, 12),
+      mergeBase: truth.mergeBase,
       usedWorkingTree: truth.usedWorkingTree,
       ...(truth.dirty ? { dirty: true } : {}),
       commits: truth.commits.map((c) => ({
