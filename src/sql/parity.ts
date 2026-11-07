@@ -51,8 +51,17 @@ function questions(graph: EvidenceGraph): [string, (g: EvidenceDb) => unknown][]
 
 export function compareEngines(graph: EvidenceGraph): Mismatch[] {
   const qs = questions(graph);
-  const a = withEvidence(graph, (g) => qs.map(([, f]) => f(g)), 'graph');
-  const b = withEvidence(graph, (g) => qs.map(([, f]) => f(g)), 'sqlite');
+  // Parity is about the shared questions: the SQLite-only extras stay off.
+  const saved = process.env.TRACETOON_SQLITE_EXTRAS;
+  process.env.TRACETOON_SQLITE_EXTRAS = '0';
+  let a: unknown[], b: unknown[];
+  try {
+    a = withEvidence(graph, (g) => qs.map(([, f]) => f(g)), 'graph');
+    b = withEvidence(graph, (g) => qs.map(([, f]) => f(g)), 'sqlite');
+  } finally {
+    if (saved === undefined) delete process.env.TRACETOON_SQLITE_EXTRAS;
+    else process.env.TRACETOON_SQLITE_EXTRAS = saved;
+  }
   const out: Mismatch[] = [];
   qs.forEach(([question], i) => {
     if (!isDeepStrictEqual(a[i], b[i])) out.push({ question, graph: a[i], sqlite: b[i] });

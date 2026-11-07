@@ -2,8 +2,8 @@
  * SQLite-only evidence (the sqlite arm's extras): what the agent read, how much
  * each turn and change cost, which edits turned a failing check into a passing
  * one, and full-text search over the "why" text. The tables are always loaded;
- * the brief shows them only with TRACETOON_SQLITE_EXTRAS=1, so the flag-off
- * sqlite arm writes the same brief as the graph arm.
+ * the brief shows them unless TRACETOON_SQLITE_EXTRAS=0, which writes the same
+ * brief as the graph arm.
  */
 import { shownCommand } from '../graph/briefRender.ts';
 import type { EvidenceDb } from '../graph/db.ts';
@@ -15,7 +15,8 @@ interface Exec {
   prepare(sql: string): { all(params?: Record<string, unknown>): unknown[] };
 }
 
-export const extrasOn = () => process.env.TRACETOON_SQLITE_EXTRAS === '1';
+/** On by default in this build (the sqlite extras arm); TRACETOON_SQLITE_EXTRAS=0 turns it off. */
+export const extrasOn = () => process.env.TRACETOON_SQLITE_EXTRAS !== '0';
 
 const CHECK_KINDS = `('test', 'build', 'typecheck', 'lint', 'eval')`;
 

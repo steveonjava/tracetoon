@@ -247,6 +247,10 @@ describe('evidence graph', () => {
       'tests',
       'housekeeping',
       'validation',
+      // The sqlite extras arm's sections (on by default in this build).
+      'context',
+      'fixes',
+      'effort',
       'limits',
       'avoid',
     ]);

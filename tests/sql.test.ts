@@ -259,10 +259,19 @@ describe('sqlite evidence store', () => {
     expect(compareEngines(graph)).toEqual([]);
 
     const titles = (b: any) => b.json.sections.map((x: any) => x.title);
-    const plain = cli(repo.root, '--json', 'query', 'brief', '--run', r.json.run);
+    // On by default in this build; =0 gives the graph arm's brief.
+    const off = { TRACETOON_SQLITE_EXTRAS: '0' };
+    const plain = cliWith(
+      off,
+      repo.root,
+      '--json',
+      'query',
+      'brief',
+      '--run',
+      r.json.run,
+    );
     expect(titles(plain)).not.toContain('context');
-    const on = { TRACETOON_SQLITE_EXTRAS: '1' };
-    const b = cliWith(on, repo.root, '--json', 'query', 'brief', '--run', r.json.run);
+    const b = cli(repo.root, '--json', 'query', 'brief', '--run', r.json.run);
     const sec = (t: string) => b.json.sections.find((x: any) => x.title === t)?.rows;
     expect(sec('context')).toEqual([
       {
