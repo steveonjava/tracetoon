@@ -8,6 +8,7 @@ import { shownCommand } from './briefRender.ts';
 import { SCHEMA_DOC } from './model.ts';
 import { SQL_SCHEMA_DOC } from '../sql/schemaDoc.ts';
 import { evidenceEngine } from './store.ts';
+import { EXTRA_RULES, extraSections, extrasOn, ftsQuery } from '../sql/extras.ts';
 
 export interface Section {
   title: string;
@@ -874,8 +875,16 @@ export function briefParts(g: EvidenceDb): { sections: Section[]; unchecked: str
       ['check', 'kind', 'outcome', 'result', 'when', 'editedAfter', 'cmd'],
       validation,
     ),
+    // The sqlite arm's extras, only when asked for: the flag-off brief is the graph arm's.
+    ...(g.dialect === 'sql' && extrasOn() ? extraSections(g) : []),
     section('limits', ['change', 'limit'], limits),
-    section('avoid', ['rule'], avoid),
+    section(
+      'avoid',
+      ['rule'],
+      g.dialect === 'sql' && extrasOn()
+        ? [...avoid, ...EXTRA_RULES.map((rule) => ({ rule }))]
+        : avoid,
+    ),
   ];
   return { sections, unchecked: uniq(uncheckedAll).sort() };
 }
@@ -1365,6 +1374,28 @@ export const QUERIES: NamedQuery[] = [
     },
   },
 ];
+
+// SQLite only: full-text search over the "why" text.
+QUERIES.push({
+  name: 'search',
+  args: '<words...>',
+  help: 'Prompts, decisions, plans, commit messages and their sentences that contain all the words (SQLite store only), best match first.',
+  run: (g, words) => {
+    if (g.dialect !== 'sql')
+      throw new GraphError('search needs the SQLite evidence store.');
+    const match = ftsQuery(words);
+    if (!match) throw new GraphError('Give one or more words to search for.');
+    const rows = g.run(
+      {
+        cypher: '',
+        sql: `SELECT kind, id, snippet(evidence_fts, 2, '«', '»', '…', 16) AS snippet
+              FROM evidence_fts WHERE evidence_fts MATCH $q ORDER BY bm25(evidence_fts) LIMIT 40`,
+      },
+      { q: match },
+    ).rows;
+    return [section('matches', ['id', 'kind', 'snippet'], rows)];
+  },
+});
 
 export function findQuery(name: string): NamedQuery | undefined {
   return QUERIES.find((q) => q.name === name);

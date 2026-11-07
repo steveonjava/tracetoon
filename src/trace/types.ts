@@ -88,6 +88,22 @@ export type TraceRecord =
 
 export type RecordKind = TraceRecord['kind'];
 
+/**
+ * A file the agent read or a search it ran (Read, Grep, Glob, view_file, …).
+ * Kept beside the records, never among them, so it can't change which sessions
+ * or records belong to a PR; only the SQLite evidence store's extras read it.
+ */
+export interface ReadRecord {
+  ts?: string;
+  cwd?: string;
+  /** The agent's tool name. */
+  tool: string;
+  /** Absolute path read, or the folder searched. */
+  path?: string;
+  /** The search pattern (Grep, Glob, grep_search). */
+  pattern?: string;
+}
+
 /** A session log found on disk, before it is fully read. */
 export interface SessionRef {
   agent: AgentId;
@@ -110,6 +126,8 @@ export interface TraceSession {
   warnings: string[];
   /** Set on a subagent's own log: the session that spawned it. */
   parentSessionId?: string;
+  /** Files read and searches run, for the SQLite store's extras. */
+  reads?: ReadRecord[];
 }
 
 export interface DiscoverQuery {

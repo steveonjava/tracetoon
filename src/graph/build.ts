@@ -9,6 +9,7 @@ import { clip } from '../digest/sanitize.ts';
 import {
   GRAPH_SCHEMA,
   type EvidenceGraph,
+  type GraphExtras,
   type GraphNode,
   type GraphRel,
   type NodeLabel,
@@ -557,6 +558,7 @@ export function buildEvidenceGraph(input: GraphInputs): EvidenceGraph {
   /** File → prompts of included turns that edited it at all (surviving or not). */
   const fileTurns = new Map<string, Set<string>>();
   const linked = new Set<string>();
+  const extras: GraphExtras = { reads: [], usage: [] };
   for (const trail of trails) {
     let turn: string | undefined;
     let previousPrompt: string | undefined;
@@ -568,6 +570,30 @@ export function buildEvidenceGraph(input: GraphInputs): EvidenceGraph {
         if (previousPrompt && previousPrompt !== id)
           rel('NEXT', ['Prompt', previousPrompt], ['Prompt', id]);
         previousPrompt = turn = id;
+        continue;
+      }
+      if (e.kind === 'read') {
+        extras.reads.push({
+          t: e.t ?? null,
+          session: trail.ref,
+          prompt: turn ?? null,
+          tool: e.tool,
+          file: e.file,
+          pattern: e.pattern ?? null,
+          inPr: e.inPr,
+        });
+        continue;
+      }
+      if (e.kind === 'usage') {
+        extras.usage.push({
+          t: e.t ?? null,
+          session: trail.ref,
+          prompt: turn ?? null,
+          input: e.input,
+          output: e.output,
+          cacheRead: e.cacheRead,
+          cacheWrite: e.cacheWrite,
+        });
         continue;
       }
       if (e.kind !== 'edit') {
@@ -717,6 +743,7 @@ export function buildEvidenceGraph(input: GraphInputs): EvidenceGraph {
     schema: GRAPH_SCHEMA,
     nodes: sorted,
     rels,
+    ...(extras.reads.length || extras.usage.length ? { extras } : {}),
     stats: {
       nodes: sorted.length,
       rels: rels.length,

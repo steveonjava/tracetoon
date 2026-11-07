@@ -55,7 +55,9 @@ matching-content receipts for claims about the submitted content.
 `digest` also builds `evidence-graph.json`: prompts, decisions, plans, runs,
 edits, files, diff hunks and commits, connected by the turn each happened in,
 the hunks an edit's lines survive in, the files edited after each run, and the
-commits each session made. Ask it with `tracetoon query <name> --run <id>`:
+commits each session made. Tracetoon loads it into SQLite (one table per kind of
+fact, one link table per connection; also saved as `evidence.sqlite`). Ask it
+with `tracetoon query <name> --run <id>`:
 
 | Query | Answers |
 |---|---|
@@ -67,7 +69,7 @@ commits each session made. Ask it with `tracetoon query <name> --run <id>`:
 | `turn <S#>` | What one prompt led to, including dead-end edits |
 | `stale <R#>` | Files edited after a run |
 | `dead-ends`, `pushback` | Abandoned edits; prompts that redirected the agent |
-| `schema`, `--cypher` | The graph's labels and relationships; your own read-only Cypher |
+| `schema`, `--sql` | The evidence tables and link tables; your own read-only SQL (SQLite) |
 
 Diff refs (`diff:120-141`) are `changes.patch` line ranges, citable as change-map
 `behaviorChecks` evidence. Graph links are captured evidence: a missing link

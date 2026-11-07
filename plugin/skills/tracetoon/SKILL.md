@@ -350,7 +350,8 @@ reviewer separate.
 - `tracetoon query [name] --run <id>`: ask the run's evidence graph. Named
   queries: `brief` (start here), `outline`, `why <path|path:line|H#|diff:N>`, `verified [path]`,
   `unverified`, `unexplained`, `turn <S#>`, `stale <R#>`, `dead-ends`,
-  `pushback`, `schema`; or `--cypher "MATCH … RETURN …"` (read-only). Output is
+  `pushback`, `schema`; or `--sql "SELECT …"` (read-only, over the tables
+  `query schema` lists; the same database is `evidence.sqlite` in the run folder). Output is
   compact TOON; add `--json` for JSON and `--all` past the row cap.
 
 - `tracetoon export --agent-trace`: line-level attribution as an Agent Trace

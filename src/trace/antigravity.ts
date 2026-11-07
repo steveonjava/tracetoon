@@ -234,6 +234,25 @@ export function parseAntigravityLines(
         } else if (name === 'run_command') {
           const cmd = unwrapArg(args.CommandLine);
           if (cmd) pendingCommands.push({ cmd, ts, cwd: fileFromArg(args.Cwd) ?? cwd });
+        } else if (
+          name === 'view_file' ||
+          name === 'grep_search' ||
+          name === 'list_dir'
+        ) {
+          // Best effort: the argument names Antigravity uses for reads and searches.
+          const at =
+            fileFromArg(args.AbsolutePath) ??
+            fileFromArg(args.SearchPath) ??
+            fileFromArg(args.DirectoryPath) ??
+            target;
+          const pattern = unwrapArg(args.Query);
+          (into.reads ??= []).push({
+            tool: name,
+            ts,
+            cwd,
+            ...(at ? { path: resolve(cwd ?? '.', at) } : {}),
+            ...(pattern ? { pattern } : {}),
+          });
         } else if (name === 'ask_question') {
           pendingQuestion = { text: unwrapArg(args.questions) ?? '', ts };
         }

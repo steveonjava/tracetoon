@@ -21,6 +21,8 @@ import type {
 
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
 const COMMAND_TOOLS = new Set(['Bash', 'PowerShell']);
+/** Tools that read the repo without changing it (kept as ReadRecords). */
+const READ_TOOLS = new Set(['Read', 'Grep', 'Glob', 'LS', 'NotebookRead']);
 const NON_USER_PROMPT_SOURCES = new Set(['system', 'sdk']);
 /** Record types we read or deliberately skip; anything else is counted as unknown. */
 const KNOWN_TYPES = new Set([
@@ -290,6 +292,20 @@ export function parseClaudeLines(
               ...where,
             });
           }
+        } else if (READ_TOOLS.has(call.name)) {
+          if (isError) continue;
+          const at =
+            str(call.input.file_path) ??
+            str(call.input.notebook_path) ??
+            str(call.input.path);
+          const pattern = str(call.input.pattern);
+          (into.reads ??= []).push({
+            tool: call.name,
+            ts: where.ts,
+            cwd: where.cwd,
+            path: resolve(where.cwd ?? '.', at ?? '.'),
+            ...(pattern ? { pattern } : {}),
+          });
         } else if (call.name === 'ExitPlanMode') {
           // The result holds the plan as submitted; the call's input can be a
           // version behind (the plan file before the agent's last edit).

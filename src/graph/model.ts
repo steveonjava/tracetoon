@@ -63,10 +63,37 @@ export interface GraphRel {
   props?: Record<string, Value>;
 }
 
+/**
+ * Evidence only the SQLite store loads (its extras): files read and searches
+ * run, and tokens per model response, each with the turn it happened in. The
+ * graph engine never reads it, so the graph arm is unchanged by it.
+ */
+export interface GraphExtras {
+  reads: {
+    t: string | null;
+    session: string;
+    prompt: string | null;
+    tool: string;
+    file: string;
+    pattern: string | null;
+    inPr: boolean;
+  }[];
+  usage: {
+    t: string | null;
+    session: string;
+    prompt: string | null;
+    input: number;
+    output: number;
+    cacheRead: number;
+    cacheWrite: number;
+  }[];
+}
+
 export interface EvidenceGraph {
   schema: typeof GRAPH_SCHEMA;
   nodes: GraphNode[];
   rels: GraphRel[];
+  extras?: GraphExtras;
   stats: {
     nodes: number;
     rels: number;
