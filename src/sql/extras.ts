@@ -140,15 +140,27 @@ const refs = (xs: string[], cap: number) =>
  */
 export function extraSections(g: EvidenceDb): Section[] {
   const run = (sql: string, json: string[] = []) => g.run({ cypher: '', sql, json }).rows;
+  // What the agent read before each edit that survives in a change, back to the
+  // previous surviving edit: the reading that edit was made with, not the whole turn's.
   const context = run(
-    `SELECT cp.change AS change,
+    `WITH ed AS (
+       SELECT e.id, e.session, e.t,
+              LAG(e.t) OVER (PARTITION BY e.session ORDER BY e.t, e.rowid) AS prev_t
+       FROM edits e WHERE e.t IS NOT NULL AND e.surviving > 0),
+     made AS (
+       SELECT DISTINCT ch.change, ed.id, ed.session, ed.t, ed.prev_t, min(ch.rowid) AS seq
+       FROM change_hunk ch JOIN edit_hunk eh ON eh.hunk = ch.hunk JOIN ed ON ed.id = eh.edit
+       GROUP BY ch.change, ed.id)
+     SELECT m.change AS change,
        json_group_array(DISTINCT r.file) FILTER (WHERE r.pattern IS NULL AND r."inPr" = 0 AND r.file <> '.') AS read,
-       json_group_array(DISTINCT r.pattern || ' in ' || r.file) FILTER (WHERE r.pattern IS NOT NULL) AS searched,
-       json_group_array(DISTINCT r.prompt) AS turns
-     FROM change_prompt cp JOIN reads r ON r.prompt = cp.prompt
-     JOIN sessions s ON s.id = r.session AND s.band = 'included'
-     GROUP BY cp.change ORDER BY min(cp.rowid)`,
-    ['read', 'searched', 'turns'],
+       json_group_array(DISTINCT CASE WHEN r.file = '.' THEN r.pattern ELSE r.pattern || ' (in ' || r.file || ')' END)
+         FILTER (WHERE r.pattern IS NOT NULL) AS searched,
+       json_group_array(DISTINCT m.id) AS beforeEdits
+     FROM made m
+     JOIN sessions s ON s.id = m.session AND s.band = 'included'
+     JOIN reads r ON r.session = m.session AND r.t <= m.t AND (m.prev_t IS NULL OR r.t > m.prev_t)
+     GROUP BY m.change ORDER BY min(m.seq)`,
+    ['read', 'searched', 'beforeEdits'],
   )
     .filter((r) => (r.read as string[]).length || (r.searched as string[]).length)
     .map((r, i) => ({
@@ -156,7 +168,12 @@ export function extraSections(g: EvidenceDb): Section[] {
       for: r.change,
       read: refs((r.read as string[]).sort(), 8),
       searched: refs(r.searched as string[], 4),
-      turns: (r.turns as string[]).sort(),
+      beforeEdits: refs(
+        (r.beforeEdits as string[]).sort(
+          (x, y) => Number(x.slice(1)) - Number(y.slice(1)),
+        ),
+        6,
+      ),
     }));
   const fixes = run(
     `SELECT c.cmd_key AS cmd, c.failed_run AS failed, c.failures AS failures, c.passed_run AS passed,
@@ -183,7 +200,7 @@ export function extraSections(g: EvidenceDb): Section[] {
   return [
     {
       title: 'context',
-      columns: ['ref', 'for', 'read', 'searched', 'turns'],
+      columns: ['ref', 'for', 'read', 'searched', 'beforeEdits'],
       rows: context,
     },
     {
@@ -201,7 +218,7 @@ export function extraSections(g: EvidenceDb): Section[] {
 
 /** Rules for the extra sections, appended to the brief's `avoid`. */
 export const EXTRA_RULES = [
-  'context rows (X#) are files outside the PR the agent read, and searches it ran, in the turns that made a change: use them to tell reviewers what was consulted (e.g. "checked the callers in X"), never to claim those files were changed or are covered.',
+  'context rows (X#) are files outside the PR the agent read, and searches it ran, just before the edits that make a change: use them to tell reviewers what was consulted (e.g. "checked the callers in X"), never to claim those files were changed or are covered.',
   'fixes rows (F#) show a check that failed, the edits between, and the next passing run of the same command; cite them for how a failure was fixed, and leave results to the Validation section.',
   'effort rows are context for you: never report token counts, turn counts or edit counts in the PR.',
   '`tracetoon query search <words> --run <id>` finds the prompts, decisions, plans and commit messages that mention a term, when you need the reason behind a change.',

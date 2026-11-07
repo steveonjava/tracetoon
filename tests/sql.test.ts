@@ -198,8 +198,8 @@ describe('sqlite evidence store', () => {
         ref: 'X1',
         for: 'CH1',
         read: ['README.md', 'src/names.ts', 'src/util.ts'],
-        searched: ['formatName in src'],
-        turns: ['S1'],
+        searched: ['formatName (in src)'],
+        beforeEdits: [expect.stringMatching(/^E\d+$/)],
       },
     ]);
     expect(sec('fixes')).toMatchObject([
@@ -256,5 +256,15 @@ describe('shell reads', () => {
     expect(of('sed -i s/a/b/ x.ts')).toEqual([]);
     expect(of('cat a.ts > b.ts')).toEqual([]);
     expect(of('bun test 2>&1')).toEqual([]);
+    expect(of('tail -n 600 $D/log.txt')).toEqual([]);
+    expect(of('cat <<EOF')).toEqual([]);
+    expect(of('bun test 2>&1 | grep -E "^\\(fail\\)|error"')).toEqual([]);
+    expect(of('rg "\\bload\\b" src')).toEqual([['shell:rg', '/r/src', '\\bload\\b']]);
+    expect(of("rg 'parse|load' src | head -20")).toEqual([
+      ['shell:rg', '/r/src', 'parse|load'],
+    ]);
+    expect(of('ls src docs')).toEqual([]);
+    expect(of('head -40 README.md')).toEqual([['shell:head', '/r/README.md', null]]);
+    expect(of('rg -n "\\"Hunk\\(" src')).toEqual([['shell:rg', '/r/src', '"Hunk\\(']]);
   });
 });
