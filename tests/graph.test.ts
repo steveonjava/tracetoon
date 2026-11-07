@@ -183,24 +183,18 @@ describe('evidence graph', () => {
       run,
     );
     expect(byLine.json.sections[0].rows[0].prompt).toBe('S1');
-    const cypher = cli(
+    const sql = cli(
       repo.root,
       '--json',
       'query',
-      '--cypher',
-      'MATCH (p:Prompt) RETURN p.id AS id ORDER BY id',
+      '--sql',
+      'SELECT id FROM prompts ORDER BY id',
       '--run',
       run,
     );
-    expect(cypher.json.sections[0].rows).toEqual([{ id: 'S1' }, { id: 'S2' }]);
-    const write = cli(
-      repo.root,
-      'query',
-      '--cypher',
-      'MATCH (p:Prompt) DETACH DELETE p',
-      '--run',
-      run,
-    );
+    expect(sql.json.sections[0].rows).toEqual([{ id: 'S1' }, { id: 'S2' }]);
+    expect(existsSync(join(runDir, 'evidence.sqlite'))).toBe(true);
+    const write = cli(repo.root, 'query', '--sql', 'DELETE FROM prompts', '--run', run);
     expect(write.code).toBe(1);
     expect(write.stderr).toContain('read queries');
     expect(cli(repo.root, 'query', 'nope', '--run', run).code).toBe(1);
@@ -637,6 +631,7 @@ describe('evidence graph', () => {
     const env = {
       ...process.env,
       TRACETOON_CYPHERLITE_WASM: join(tempDir(), 'missing.wasm'),
+      TRACETOON_EVIDENCE_ENGINE: 'graph',
     };
     const r = spawnSync(
       PROGRAM[0]!,

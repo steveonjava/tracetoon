@@ -1,7 +1,8 @@
 /** `tracetoon query`: ask a run's evidence graph a named question or read-only Cypher. */
-import { GraphError, withGraph } from '../graph/engine.ts';
+import { GraphError } from '../graph/db.ts';
+import { withEvidence } from '../graph/store.ts';
 import { loadGraph } from '../graph/evidence.ts';
-import { findQuery, QUERIES, rawQuery, type Section } from '../graph/queries.ts';
+import { findQuery, QUERIES, rawQuery, rawSql, type Section } from '../graph/queries.ts';
 import { toToon } from '../graph/toon.ts';
 import { assertRunOwner, findRun } from '../run.ts';
 import { count } from '../util/profile.ts';
@@ -11,6 +12,7 @@ import { emit, UserError, type OutOpts } from './output.ts';
 export interface QueryOpts extends OutOpts {
   run?: string;
   cypher?: string;
+  sql?: string;
   params?: string;
   all?: boolean;
 }
@@ -22,13 +24,13 @@ export function queryHelp(): string {
   return [
     'Named queries (tracetoon query <name> [args] --run <id>):',
     ...QUERIES.map((q) => `  ${`${q.name} ${q.args}`.trim().padEnd(34)} ${q.help}`),
-    '  --cypher "<MATCH ... RETURN ...>"   your own read-only query (see `query schema`)',
+    '  --sql "<SELECT ...>"                your own read-only SQL over the evidence tables (see `query schema`)',
   ].join('\n');
 }
 
 export function queryCmd(cwd: string, words: string[], opts: QueryOpts): void {
   const [name, ...args] = words;
-  if (!name && !opts.cypher) {
+  if (!name && !opts.cypher && !opts.sql) {
     emit(
       opts,
       { queries: QUERIES.map(({ name, args, help }) => ({ name, args, help })) },
@@ -61,15 +63,21 @@ export function queryCmd(cwd: string, words: string[], opts: QueryOpts): void {
   }
   let sections: Section[];
   try {
-    sections = withGraph(graph, (g) =>
-      named ? named.run(g, args) : rawQuery(g, opts.cypher!, params),
+    sections = withEvidence(graph, (g) =>
+      named
+        ? named.run(g, args)
+        : opts.sql
+          ? rawSql(g, opts.sql, params)
+          : rawQuery(g, opts.cypher!, params),
     );
   } catch (e) {
     if (e instanceof GraphError) throw new UserError(e.message);
     throw e;
   }
   count('graph.queries');
-  emit(opts, { run: run.id, query: named?.name ?? 'cypher', sections }, () =>
-    toToon(sections, { rowCap: opts.all ? Infinity : ROW_CAP }),
+  emit(
+    opts,
+    { run: run.id, query: named?.name ?? (opts.sql ? 'sql' : 'cypher'), sections },
+    () => toToon(sections, { rowCap: opts.all ? Infinity : ROW_CAP }),
   );
 }

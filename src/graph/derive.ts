@@ -7,7 +7,8 @@
  *    no captured edit explains.
  */
 import type { TraceDigest } from '../digest/build.ts';
-import { GraphEngine } from './engine.ts';
+import type { EvidenceDb } from './db.ts';
+import { withEvidence } from './store.ts';
 import type { EvidenceGraph } from './model.ts';
 import { checksAfterLastEdit, unexplainedHunks } from './queries.ts';
 
@@ -32,16 +33,26 @@ export interface GraphDerived {
 const MAX_FILE_FACTS = 6;
 const MAX_LATER = 8;
 
-export function deriveFromGraph(g: GraphEngine): GraphDerived {
+export function deriveFromGraph(g: EvidenceDb): GraphDerived {
   // Turns whose edits survive in each file, strongest first.
   const fileFacts: Record<string, string[]> = {};
-  const turnRows = g.run(
-    `MATCH (f:File {inPr: true})<-[:EDITS]-(e:Edit)-[:IN_TURN]->(p:Prompt)
+  const turnRows = g.run({
+    cypher: `MATCH (f:File {inPr: true})<-[:EDITS]-(e:Edit)-[:IN_TURN]->(p:Prompt)
      WHERE e.surviving > 0 AND EXISTS { MATCH (e)-[:IN_SESSION]->(:Session {band: 'included'}) }
      WITH f, p, sum(e.surviving) AS lines
      OPTIONAL MATCH (x)-[:IN_TURN]->(p) WHERE x:Decision OR x:Plan
      RETURN f.id AS file, p.id AS prompt, lines, collect(DISTINCT x.id) AS facts`,
-  ).rows;
+    sql: `SELECT e.file AS file, it.prompt AS prompt, sum(e.surviving) AS lines,
+            (SELECT json_group_array(DISTINCT x.id) FROM turn_facts x WHERE x.prompt = it.prompt) AS facts
+     FROM edits e
+     JOIN files f ON f.id = e.file AND f."inPr" = 1
+     JOIN in_turn it ON it.kind = 'Edit' AND it.id = e.id
+     JOIN sessions s ON s.id = e.session AND s.band = 'included'
+     WHERE e.surviving > 0
+     GROUP BY e.file, it.prompt
+     ORDER BY min(e.rowid)`,
+    json: ['facts'],
+  }).rows;
   const byFile = new Map<string, { prompt: string; lines: number; facts: string[] }[]>();
   for (const r of turnRows)
     byFile.set(String(r.file), [
@@ -70,32 +81,44 @@ export function deriveFromGraph(g: GraphEngine): GraphDerived {
       fileChecks[c.file] = c.after.slice(0, 3).map((x) => `${x.id}:${x.outcome}`);
 
   const runLaterEdits: Record<string, string[]> = {};
-  for (const r of g.run(
-    'MATCH (r:Run)-[:LATER_EDIT]->(f:File) RETURN r.id AS run, f.id AS file',
-  ).rows)
+  for (const r of g.run({
+    cypher: 'MATCH (r:Run)-[:LATER_EDIT]->(f:File) RETURN r.id AS run, f.id AS file',
+    sql: `SELECT run, file FROM run_later_edit ORDER BY rowid`,
+  }).rows)
     (runLaterEdits[String(r.run)] ??= []).push(String(r.file));
   for (const k of Object.keys(runLaterEdits))
     runLaterEdits[k] = runLaterEdits[k]!.sort().slice(0, MAX_LATER);
 
   // Relevance: how much of the PR a fact explains.
   const relevance: Record<string, number> = {};
-  for (const r of g.run(
-    `MATCH (p:Prompt)
+  for (const r of g.run({
+    cypher: `MATCH (p:Prompt)
      OPTIONAL MATCH (e:Edit)-[:IN_TURN]->(p)
      RETURN p.id AS id, sum(coalesce(e.surviving, 0)) AS lines, p.pushback AS pushback,
             NOT EXISTS { MATCH (:Prompt)-[:NEXT]->(p) } AS first`,
-  ).rows) {
+    sql: `SELECT p.id AS id, sum(coalesce(e.surviving, 0)) AS lines, p.pushback AS pushback,
+            NOT EXISTS (SELECT 1 FROM prompt_next pn WHERE pn.next = p.id) AS first
+     FROM prompts p
+     LEFT JOIN in_turn it ON it.kind = 'Edit' AND it.prompt = p.id
+     LEFT JOIN edits e ON e.id = it.id
+     GROUP BY p.id ORDER BY p.rowid`,
+  }).rows) {
     const lines = Number(r.lines);
     relevance[String(r.id)] =
       (lines ? 2 + Math.min(lines, 200) / 20 : 0) +
       (r.pushback ? 3 : 0) +
       (r.first ? 2 : 0);
   }
-  for (const r of g.run(
-    `MATCH (x)-[:IN_TURN]->(p:Prompt) WHERE x:Decision OR x:Plan
+  for (const r of g.run({
+    cypher: `MATCH (x)-[:IN_TURN]->(p:Prompt) WHERE x:Decision OR x:Plan
      OPTIONAL MATCH (e:Edit)-[:IN_TURN]->(p)
      RETURN x.id AS id, sum(coalesce(e.surviving, 0)) AS lines`,
-  ).rows) {
+    sql: `SELECT x.id AS id, sum(coalesce(e.surviving, 0)) AS lines
+     FROM turn_facts x
+     LEFT JOIN in_turn it ON it.kind = 'Edit' AND it.prompt = x.prompt
+     LEFT JOIN edits e ON e.id = it.id
+     GROUP BY x.id`,
+  }).rows) {
     const lines = Number(r.lines);
     relevance[String(r.id)] = 1 + (lines ? 2 + Math.min(lines, 200) / 20 : 0);
   }
@@ -106,10 +129,13 @@ export function deriveFromGraph(g: GraphEngine): GraphDerived {
   );
   const lastOfCmd = new Map<string, string>();
   const runs = g
-    .run(
-      `MATCH (r:Run) RETURN r.id AS id, r.cmd AS cmd, r.t AS t, r.revision AS revision,
+    .run({
+      cypher: `MATCH (r:Run) RETURN r.id AS id, r.cmd AS cmd, r.t AS t, r.revision AS revision,
             COUNT { (r)-[:LATER_EDIT]->() } AS later`,
-    )
+      sql: `SELECT r.id AS id, r.cmd AS cmd, r.t AS t, r.revision AS revision,
+            (SELECT count(*) FROM run_later_edit rl WHERE rl.run = r.id) AS later
+     FROM runs r ORDER BY r.rowid`,
+    })
     .rows.sort((a, b) => String(a.t ?? '').localeCompare(String(b.t ?? '')));
   for (const r of runs) lastOfCmd.set(String(r.cmd), String(r.id));
   const finals = new Set(lastOfCmd.values());
@@ -168,10 +194,5 @@ export function annotateDigest(d: TraceDigest, derived: GraphDerived): void {
 }
 
 export function deriveFromGraphJson(graph: EvidenceGraph): GraphDerived {
-  const g = GraphEngine.load(graph);
-  try {
-    return deriveFromGraph(g);
-  } finally {
-    g.close();
-  }
+  return withEvidence(graph, deriveFromGraph);
 }

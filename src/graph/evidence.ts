@@ -16,13 +16,16 @@ import type { Run as DigestRun } from '../digest/build.ts';
 import { buildEvidenceGraph } from './build.ts';
 import { annotateDigest, deriveFromGraphJson, type GraphDerived } from './derive.ts';
 import type { EvidenceGraph } from './model.ts';
-import { withGraph } from './engine.ts';
+import { evidenceEngine, withEvidence } from './store.ts';
+import { SqlEngine } from '../sql/engine.ts';
 import { briefParts, findQuery } from './queries.ts';
 import type { BriefParts } from './briefRender.ts';
 import { toToon } from './toon.ts';
 
 export const GRAPH_FILE = 'evidence-graph.json';
 export const GRAPH_REVIEW_FILE = 'graph-review.json';
+/** The same evidence as SQLite tables, for any SQLite client (`sqlite3 evidence.sqlite`). */
+export const SQL_FILE = 'evidence.sqlite';
 
 export interface GraphOutcome {
   graph?: EvidenceGraph;
@@ -136,11 +139,22 @@ export function graphEnricher(
 }
 
 export function saveGraph(run: Run, outcome: GraphOutcome): void {
-  for (const f of [GRAPH_FILE, GRAPH_REVIEW_FILE])
+  for (const f of [GRAPH_FILE, GRAPH_REVIEW_FILE, SQL_FILE])
     if (existsSync(join(run.dir, f))) unlinkSync(join(run.dir, f));
   if (!outcome.graph || !outcome.derived) return;
   writeJson(run, GRAPH_FILE, outcome.graph);
   writeJson(run, GRAPH_REVIEW_FILE, outcome.derived.review);
+  if (evidenceEngine() === 'sqlite')
+    try {
+      const db = SqlEngine.load(outcome.graph);
+      try {
+        db.exportTo(join(run.dir, SQL_FILE));
+      } finally {
+        db.close();
+      }
+    } catch {
+      /* the JSON is the record; the database file is a convenience */
+    }
 }
 
 export function loadGraph(run: Run): EvidenceGraph | undefined {
@@ -160,7 +174,7 @@ export function loadGraphReview(run: Run): GraphDerived['review'] | undefined {
 /** The brief as data, for `render` to write the Validation section and check ref tags. */
 export function graphBriefParts(graph: EvidenceGraph): BriefParts | undefined {
   try {
-    return withGraph(graph, (g) => briefParts(g));
+    return withEvidence(graph, (g) => briefParts(g));
   } catch {
     return undefined;
   }
@@ -168,7 +182,7 @@ export function graphBriefParts(graph: EvidenceGraph): BriefParts | undefined {
 
 export function graphBrief(graph: EvidenceGraph, rowCap = 60): string | undefined {
   try {
-    const sections = withGraph(graph, (g) => findQuery('brief')!.run(g, []));
+    const sections = withEvidence(graph, (g) => findQuery('brief')!.run(g, []));
     return toToon(sections, { rowCap }).trimEnd();
   } catch {
     return undefined;

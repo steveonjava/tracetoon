@@ -168,11 +168,15 @@ program
 program
   .command('query [words...]')
   .description(
-    "ask this run's evidence graph: a named query (brief, outline, why <path|H#>, verified, unverified, unexplained, turn <S#>, stale <R#>, dead-ends, pushback, schema) or --cypher",
+    "ask this run's evidence graph: a named query (brief, outline, why <path|H#>, verified, unverified, unexplained, turn <S#>, stale <R#>, dead-ends, pushback, schema, search <terms>) or --sql",
   )
   .option('--run <id>', 'run id (default: latest)')
-  .option('--cypher <query>', 'a read-only Cypher query (MATCH ... RETURN ...)')
-  .option('--params <json>', 'parameters for --cypher, as a JSON object')
+  .option('--sql <query>', 'a read-only SQL query over the evidence tables (SELECT ...)')
+  .option(
+    '--cypher <query>',
+    'a read-only Cypher query (only with TRACETOON_EVIDENCE_ENGINE=graph)',
+  )
+  .option('--params <json>', 'parameters for --sql or --cypher, as a JSON object')
   .option('--all', `print every row (default: at most ${ROW_CAP} per section)`)
   .action((words, o) => queryCmd(cwd, words ?? [], { ...g(), ...o }));
 
