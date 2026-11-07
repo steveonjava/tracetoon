@@ -24,6 +24,9 @@ export interface NamedQuery {
 }
 
 const CHECK_KINDS = ['test', 'build', 'typecheck', 'lint', 'eval'];
+// SQL forms order rows as cypherlite returns them where the TypeScript keeps
+// that order: nodes in load order (rowid), relationships newest first (link
+// rowid DESC). Elsewhere the TypeScript sorts and SQL order is irrelevant.
 const uniq = <T>(xs: T[]) => [...new Set(xs)];
 const byDiff = (a: string, b: string) =>
   Number(/\d+/.exec(a)?.[0] ?? 0) - Number(/\d+/.exec(b)?.[0] ?? 0);
@@ -405,7 +408,7 @@ export function briefParts(g: EvidenceDb): { sections: Section[]; unchecked: str
                 JOIN sessions s ON s.id = e.session AND s.band = 'included') e ON e.hunk = h.id
      LEFT JOIN commit_hunk ck ON ck.hunk = h.id
      GROUP BY ch.change, h.id
-     ORDER BY ch.rowid`,
+     ORDER BY (SELECT c.rowid FROM changes c WHERE c.id = ch.change), ch.rowid DESC`,
     json: ['commits'],
   }).rows;
   const fileRole = new Map(
@@ -578,7 +581,8 @@ export function briefParts(g: EvidenceDb): { sections: Section[]; unchecked: str
      RETURN k.id AS commit, h.id AS id, h.file AS file, h.touched AS symbols, h.words AS words`,
     sql: `SELECT ck."commit" AS "commit", h.id AS id, h.file AS file, h.touched AS symbols, h.words AS words
      FROM commit_hunk ck JOIN hunks h ON h.id = ck.hunk
-     ORDER BY ck.rowid`,
+     JOIN commits k ON k.id = ck."commit"
+     ORDER BY k.rowid, ck.rowid DESC`,
   }).rows)
     commitHunks.set(String(r.commit), [...(commitHunks.get(String(r.commit)) ?? []), r]);
   const implementedBy = (commit: string, text: unknown): string[] =>
@@ -1102,7 +1106,7 @@ export const QUERIES: NamedQuery[] = [
                 sql: `SELECT c.id AS "commit", c.subject AS subject, sc.session AS madeInSession, c.body AS body
                FROM commit_file cf JOIN commits c ON c.id = cf."commit"
                LEFT JOIN session_commit sc ON sc."commit" = c.id
-               WHERE cf.file = $file ORDER BY cf.rowid`,
+               WHERE cf.file = $file ORDER BY cf.rowid DESC, sc.rowid DESC`,
               },
               { file },
             )
