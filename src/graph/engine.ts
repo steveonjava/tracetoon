@@ -9,7 +9,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CypherliteDb, initSync } from './vendor/cypherlite.js';
 import { assetsDir } from '../util/assets.ts';
-import { measured } from '../util/profile.ts';
+import { count, measured } from '../util/profile.ts';
 import type { EvidenceGraph, NodeLabel, Value } from './model.ts';
 
 export const WASM_FILE = 'cypherlite.wasm';
@@ -28,6 +28,12 @@ interface Envelope {
 }
 
 let initialized: true | Error | undefined;
+let wasmMemory: WebAssembly.Memory | undefined;
+
+/** Bytes of WebAssembly linear memory cypherlite holds (it only grows), for engine cost reporting. */
+export function graphWasmMemoryBytes(): number | undefined {
+  return wasmMemory?.buffer.byteLength;
+}
 
 function init(): void {
   if (initialized === true) return;
@@ -41,7 +47,7 @@ function init(): void {
     throw initialized;
   }
   try {
-    initSync({ module: readFileSync(path) });
+    wasmMemory = initSync({ module: readFileSync(path) }).memory;
     initialized = true;
   } catch (e) {
     initialized = new GraphError(
@@ -80,6 +86,17 @@ export class GraphEngine {
 
   /** Load a graph: one batched statement per label and relationship shape. */
   static load(graph: EvidenceGraph): GraphEngine {
+    const started = performance.now();
+    count('evidence.loads');
+    count('evidence.engine.cypherlite');
+    try {
+      return GraphEngine.loadNow(graph);
+    } finally {
+      count('evidence.loadMs', Math.round(performance.now() - started));
+    }
+  }
+
+  private static loadNow(graph: EvidenceGraph): GraphEngine {
     return measured('graph.load', () => {
       const engine = new GraphEngine();
       const byLabel = new Map<NodeLabel, Record<string, Value>[]>();
@@ -87,11 +104,11 @@ export class GraphEngine {
         byLabel.set(n.label, [...(byLabel.get(n.label) ?? []), { ...n.props, id: n.id }]);
       for (const [label, rows] of byLabel) {
         if (!LABEL.test(label)) throw new GraphError(`Bad label ${label}`);
-        engine.run(
+        engine.runNow(
           `CREATE INDEX ${label.toLowerCase()}_id IF NOT EXISTS FOR (n:${label}) ON (n.id)`,
         );
         for (let i = 0; i < rows.length; i += BATCH)
-          engine.run(`UNWIND $rows AS r CREATE (n:${label}) SET n += r`, {
+          engine.runNow(`UNWIND $rows AS r CREATE (n:${label}) SET n += r`, {
             rows: rows.slice(i, i + BATCH),
           });
       }
@@ -111,7 +128,7 @@ export class GraphEngine {
         if (![from, type.replace(/_/g, ''), to].every((x) => /^[A-Za-z]+$/.test(x)))
           throw new GraphError(`Bad relationship ${key}`);
         for (let i = 0; i < rows.length; i += BATCH)
-          engine.run(
+          engine.runNow(
             `UNWIND $rows AS r MATCH (a:${from} {id: r.from}), (b:${to} {id: r.to}) CREATE (a)-[x:${type}]->(b) SET x += r.props`,
             { rows: rows.slice(i, i + BATCH) },
           );
@@ -122,6 +139,16 @@ export class GraphEngine {
 
   /** Run one statement. Errors carry the engine's own message. */
   run(cypher: string, params?: Record<string, unknown>): QueryResult {
+    const started = performance.now();
+    try {
+      return this.runNow(cypher, params);
+    } finally {
+      count('evidence.queries');
+      count('evidence.queryMs', Math.round((performance.now() - started) * 1000) / 1000);
+    }
+  }
+
+  private runNow(cypher: string, params?: Record<string, unknown>): QueryResult {
     if (this.dead) throw this.dead;
     let raw: string;
     try {
@@ -147,6 +174,8 @@ export class GraphEngine {
   }
 
   close(): void {
+    // Peak WebAssembly memory, in KB, summed over loads (divide by evidence.loads).
+    count('evidence.wasmKB', Math.round((graphWasmMemoryBytes() ?? 0) / 1024));
     try {
       this.db.free();
     } catch {
