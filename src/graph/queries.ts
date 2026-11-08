@@ -680,6 +680,7 @@ export function briefParts(g: GraphEngine): { sections: Section[]; unchecked: st
     'Call a symbol new, added or introduced only if it is in newSymbols; others already existed and were changed.',
     'changes.was lines are code, not history: quote one only verbatim, as `old` → `new` in its file; never describe what the old code did or why beyond that.',
     "Words a commit message puts in parentheses or asides ('local only', 'experimental', 'for now') are that commit's own remark: attribute them or leave them out; never turn them into claims about what the PR includes.",
+    "Name a file for a behavior only after `tracetoon query hunks <CH#>` shows that file's hunk carries it (its symbols, words or old → new values); a change unit lists several files and the brief does not say which one does what.",
   ].map((rule) => ({ rule }));
 
   // What the added tests check, by their titles.
@@ -1139,6 +1140,210 @@ export const QUERIES: NamedQuery[] = [
     },
   },
 ];
+
+/** Relationships that carry provenance; IN_SESSION is left out (it links everything in a session). */
+const PROVENANCE =
+  'IN_TURN|SURVIVES_IN|EDITS|OF|INTRODUCED|TOUCHES|SAYS|ASKED_BY|HAS|EXPLAINED_BY|ASKED_BEFORE|NEXT|MADE|LATER_EDIT';
+
+/** A ref as (label, id): S1, D1, P1, R1, V1, E1, H1, CH1, a commit sha (or commit:<sha>, <sha>#n), a path or diff:N. */
+function node(g: GraphEngine, raw: string | undefined): { label: string; id: string } {
+  if (!raw)
+    throw new GraphError(
+      'Give two refs, e.g. `path S3 H12` or `path commit:abc1234 src/x.ts`.',
+    );
+  const simple: [RegExp, string][] = [
+    [/^S\d+$/, 'Prompt'],
+    [/^D\d+$/, 'Decision'],
+    [/^P\d+$/, 'Plan'],
+    [/^R\d+$/, 'Run'],
+    [/^V\d+$/, 'Receipt'],
+    [/^E\d+$/, 'Edit'],
+    [/^H\d+$/, 'Hunk'],
+    [/^CH\d+$/, 'Change'],
+  ];
+  for (const [re, label] of simple)
+    if (re.test(raw)) {
+      if (
+        !g.run(`MATCH (n:${label} {id: $id}) RETURN n.id AS id`, { id: raw }).rows.length
+      )
+        throw new GraphError(`No ${raw} in this run's evidence graph.`);
+      return { label, id: raw };
+    }
+  const sha = /^(?:commit:)?([0-9a-f]{7,40})(#\d+)?$/.exec(raw);
+  if (sha) {
+    const label = sha[2] ? 'CommitClaim' : 'Commit';
+    const ids = g
+      .run(`MATCH (c:${label}) RETURN c.id AS id`)
+      .rows.map((r) => String(r.id));
+    const want = sha[1]! + (sha[2] ?? '');
+    const hit =
+      ids.find(
+        (id) => id.startsWith(sha[1]!.slice(0, 12)) && (!sha[2] || id.endsWith(sha[2])),
+      ) ??
+      ids.find(
+        (id) => want.startsWith(id.split('#')[0]!) && (!sha[2] || id.endsWith(sha[2])),
+      );
+    if (!hit)
+      throw new GraphError(
+        `No ${label === 'Commit' ? 'commit' : 'commit sentence'} ${raw} in this run's evidence graph.`,
+      );
+    return { label, id: hit };
+  }
+  const t = target(g, raw);
+  return t.hunk ? { label: 'Hunk', id: t.hunk } : { label: 'File', id: t.file! };
+}
+
+// Lookups that let a writer check what the brief summarizes: the provenance path
+// between two things, the hunks behind a change, and a word search.
+QUERIES.push(
+  {
+    name: 'path',
+    args: '<from> <to>',
+    help: 'The shortest provenance chain between two refs (S#, H#, CH#, commit sha, file path, diff:N): which request led to this hunk, which commit carries this request. Each step names the link it follows.',
+    run: (g, [a, b]) => {
+      const from = node(g, a);
+      const to = node(g, b);
+      const rows = g.run(
+        `MATCH (a:${from.label} {id: $a}), (b:${to.label} {id: $b})
+         MATCH p = shortestPath((a)-[:${PROVENANCE}*..8]-(b))
+         RETURN [n IN nodes(p) | {label: labels(n)[0], id: n.id,
+                 text: coalesce(n.text, n.subject, n.excerpt, n.cmd, n.file, n.key, '')}] AS chain,
+                [r IN relationships(p) | type(r)] AS links`,
+        { a: from.id, b: to.id },
+      ).rows[0];
+      if (!rows)
+        return [
+          section('path', ['step', 'ref', 'kind', 'via', 'text'], []),
+          section(
+            'notes',
+            ['note'],
+            [
+              {
+                note: `No provenance chain of 8 links or fewer between ${a} and ${b}: the logs don't connect them.`,
+              },
+            ],
+          ),
+        ];
+      const chain = rows.chain as { label: string; id: string; text: string }[];
+      const links = rows.links as string[];
+      return [
+        section(
+          'path',
+          ['step', 'ref', 'kind', 'via', 'text'],
+          chain.map((n, i) => ({
+            step: i,
+            ref: n.label === 'Commit' ? `commit:${n.id}` : n.id,
+            kind: n.label,
+            via: i ? links[i - 1] : null,
+            text: clipText(String(n.text ?? '').replace(/\s+/g, ' '), 160),
+          })),
+        ),
+      ];
+    },
+  },
+  {
+    name: 'hunks',
+    args: '<CH#|path>',
+    help: 'Every hunk of a change unit or file: its file and diff ref, the symbols it touches, new symbols, old → new values, test titles, the commits and requests behind it, and its changed-line words. Check here which file carries a behavior before naming it.',
+    run: (g, [raw]) => {
+      if (!raw) throw new GraphError('Give a change unit (CH2) or a file path.');
+      const byChange = /^CH\d+$/.test(raw);
+      const file = byChange ? undefined : target(g, raw).file;
+      if (!byChange && !file)
+        throw new GraphError(`Give a file path or a change unit, not ${raw}.`);
+      const rows = g.run(
+        `${byChange ? 'MATCH (:Change {id: $id})-[:HAS]->(h:Hunk)' : 'MATCH (h:Hunk)-[:OF]->(:File {id: $id})'}
+         OPTIONAL MATCH (k:Commit)-[:INTRODUCED]->(h)
+         OPTIONAL MATCH (h)<-[:SURVIVES_IN]-(e:Edit)-[:IN_TURN]->(p:Prompt)
+         RETURN h.id AS hunk, h.file AS file, h.diff AS diff, h.touched AS symbols, h.fresh AS fresh,
+                h.pairs AS was, h.tests AS tests, h.words AS words,
+                collect(DISTINCT k.id) AS commits, collect(DISTINCT p.id) AS requests`,
+        { id: byChange ? raw : file },
+      ).rows;
+      return [
+        section(
+          'hunks',
+          [
+            'hunk',
+            'file',
+            'diff',
+            'symbols',
+            'fresh',
+            'was',
+            'tests',
+            'commits',
+            'requests',
+            'words',
+          ],
+          rows
+            .map((r): Record<string, unknown> => ({
+              ...r,
+              commits: ((r.commits as string[]) ?? []).sort().map((c) => `commit:${c}`),
+              requests: ((r.requests as string[]) ?? []).sort(factOrder),
+              words: ((r.words as string[]) ?? []).slice(0, 24),
+            }))
+            .sort((x, y) => byDiff(String(x.diff), String(y.diff))),
+        ),
+      ];
+    },
+  },
+  {
+    name: 'search',
+    args: '<words...>',
+    help: 'Requests, decisions, plans, commit messages and their sentences, and hunks (by changed-line words) that contain the words, most matches first.',
+    run: (g, words) => {
+      const terms = words
+        .flatMap((w) => w.toLowerCase().split(/[^a-z0-9_.-]+/))
+        .filter((w) => w.length >= 2);
+      if (!terms.length) throw new GraphError('Give one or more words to search for.');
+      const docs = [
+        ...g.run("MATCH (n:Prompt) RETURN n.id AS id, 'Prompt' AS kind, n.text AS text")
+          .rows,
+        ...g.run(
+          "MATCH (n:Decision) RETURN n.id AS id, 'Decision' AS kind, n.text AS text",
+        ).rows,
+        ...g.run("MATCH (n:Plan) RETURN n.id AS id, 'Plan' AS kind, n.excerpt AS text")
+          .rows,
+        ...g.run(
+          "MATCH (n:Commit) RETURN 'commit:' + n.id AS id, 'Commit' AS kind, n.subject + ' ' + coalesce(n.body, '') AS text",
+        ).rows,
+        ...g.run(
+          "MATCH (n:CommitClaim) RETURN n.id AS id, 'CommitClaim' AS kind, n.text AS text",
+        ).rows,
+        ...g
+          .run(
+            'MATCH (n:Hunk) RETURN n.id AS id, n.file AS file, n.touched AS symbols, n.words AS words',
+          )
+          .rows.map((r) => ({
+            id: r.id,
+            kind: 'Hunk',
+            text: [
+              r.file,
+              ...((r.symbols as string[]) ?? []),
+              ...((r.words as string[]) ?? []),
+            ].join(' '),
+          })),
+      ];
+      const scored = docs
+        .map((d) => {
+          const text = String(d.text ?? '');
+          const low = text.toLowerCase();
+          const hits = terms.filter((t) => low.includes(t));
+          const at = hits.length ? low.indexOf(hits[0]!) : 0;
+          return {
+            id: d.id,
+            kind: d.kind,
+            matched: hits.length,
+            snippet: clipText(text.slice(Math.max(0, at - 60)).replace(/\s+/g, ' '), 160),
+          };
+        })
+        .filter((d) => d.matched > 0)
+        .sort((a, b) => b.matched - a.matched || factOrder(String(a.id), String(b.id)))
+        .slice(0, 25);
+      return [section('matches', ['id', 'kind', 'matched', 'snippet'], scored)];
+    },
+  },
+);
 
 export function findQuery(name: string): NamedQuery | undefined {
   return QUERIES.find((q) => q.name === name);

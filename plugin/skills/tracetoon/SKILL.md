@@ -124,6 +124,12 @@ reviewer separate.
    1. Read the `brief` (in the prepare output; also `tracetoon query brief --run <id>`)
       and the diff refs it cites (`changes.patch`). Its `limits` and `avoid` rows
       are instructions for you: follow them, never copy their wording into the PR.
+      Check it as you go: a change unit lists several files and the brief does not
+      say which one does what. Before naming a file or symbol for a behavior, run
+      `tracetoon query hunks <CH#> --run <id>` (which file's hunks carry it: symbols,
+      words, old → new values); for the request behind a hunk use `query path
+      <S#|commit:sha> <H#>` or `query why <path>`; `query search <words>` finds where
+      a term appears. About 3–8 lookups in all; never read the whole patch.
    2. Write `title.txt` (one line; keep a title the user gave) and `body.md`
       following [references/writing-guide.md](references/writing-guide.md), in
       this order:
@@ -350,7 +356,8 @@ reviewer separate.
 - `tracetoon query [name] --run <id>`: ask the run's evidence graph. Named
   queries: `brief` (start here), `outline`, `why <path|path:line|H#|diff:N>`, `verified [path]`,
   `unverified`, `unexplained`, `turn <S#>`, `stale <R#>`, `dead-ends`,
-  `pushback`, `schema`; or `--cypher "MATCH … RETURN …"` (read-only). Output is
+  `pushback`, `path <from> <to>`, `hunks <CH#|path>`, `search <words>`, `schema`;
+  or `--cypher "MATCH … RETURN …"` (read-only). Output is
   compact TOON; add `--json` for JSON and `--all` past the row cap.
 
 - `tracetoon export --agent-trace`: line-level attribution as an Agent Trace

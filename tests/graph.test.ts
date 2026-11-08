@@ -332,6 +332,36 @@ describe('evidence graph', () => {
     expect(r.json.contributionReview.status).toBe('skipped');
   });
 
+  test('lookups for checking the brief: hunks, path and search', () => {
+    const { repo, cli } = scenario();
+    const prepared = cli(repo.root, '--json', 'prepare', '--offline');
+    const run = prepared.json.run;
+    expect(prepared.json.next).toContain('query hunks');
+    const q = (...a: string[]) =>
+      cli(repo.root, '--json', 'query', ...a, '--run', run).json;
+    const changes = q('brief').sections.find((x: any) => x.title === 'changes').rows;
+    const greet = changes.find((c: any) =>
+      c.where.some((w: string) => w.startsWith('src/greet.ts')),
+    );
+    // hunks: which file carries the change, with its symbols and the request behind it.
+    const hunks = q('hunks', greet.change).sections[0].rows;
+    expect(hunks.map((h: any) => h.file)).toEqual(['src/greet.ts']);
+    expect(hunks[0].symbols).toContain('greet');
+    expect(hunks[0].requests).toEqual(['S1']);
+    // path: the request to its hunk, through the turn's edit (not the session hub).
+    const path = q('path', 'S1', hunks[0].hunk).sections[0].rows;
+    expect(path[0].ref).toBe('S1');
+    expect(path.at(-1).ref).toBe(hunks[0].hunk);
+    expect(path.map((p: any) => p.via).filter(Boolean)).not.toContain('IN_SESSION');
+    expect(path.map((p: any) => p.kind)).toContain('Edit');
+    // search: finds the request and the hunk by their words.
+    const found = q('search', 'farewell').sections[0].rows;
+    expect(found.map((r: any) => r.id)).toContain('S2');
+    expect(found.some((r: any) => r.kind === 'Hunk')).toBe(true);
+    // A ref the graph doesn't have is a clear error.
+    expect(cli(repo.root, 'query', 'path', 'S1', 'H999', '--run', run).code).toBe(1);
+  });
+
   test('hunks: symbols end with their body, imports define nothing, values and tests are read', () => {
     const patch = [
       'diff --git a/src/a.ts b/src/a.ts',
