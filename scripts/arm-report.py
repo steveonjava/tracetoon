@@ -17,7 +17,8 @@ import sys
 from collections import defaultdict
 
 METRICS = ['claimCoverage', 'contextCoverage', 'factualErrors', 'unsupportedClaims', 'evidenceGaps']
-ARMS = ['graph', 'relational']
+ALL_ARMS = ['graph', 'relational', 'hybrid']
+PAIRS = [('graph', 'relational'), ('hybrid', 'relational'), ('hybrid', 'graph')]
 
 
 def artifacts(exp):
@@ -92,31 +93,47 @@ def fmt(x, nd=0):
     return f'{x:,.{nd}f}'
 
 
+def paired(verd, x, y, model):
+    better = worse = same = 0
+    for k, v in verd[x].items():
+        if k[0] != model or k not in verd[y]:
+            continue
+        d = v - verd[y][k]
+        better += d > 0
+        worse += d < 0
+        same += d == 0
+    return better, worse, same
+
+
 def main():
     trio = sys.argv[1]
     md_out = sys.argv[sys.argv.index('--md') + 1] if '--md' in sys.argv else None
-    lines = ['# Graph vs relational vs base (paired prbench trio)', '']
-    a_checks = []
+    lines = ['# Graph, relational and hybrid vs base (paired prbench arms)', '']
+    checks = []
     for provider in ['claude', 'codex']:
-        exps = {arm: f'{trio}/{provider}-{arm}' for arm in ARMS}
-        if not all(os.path.exists(f'{e}/summary.json') for e in exps.values()):
+        arms = [a for a in ALL_ARMS if os.path.exists(f'{trio}/{provider}-{a}/summary.json')]
+        if 'graph' not in arms or len(arms) < 2:
             lines += [f'## {provider}: not complete', '']
             continue
+        exps = {arm: f'{trio}/{provider}-{arm}' for arm in arms}
         arts = {arm: artifacts(e) for arm, e in exps.items()}
         verd = {arm: verdicts(e) for arm, e in exps.items()}
         qual = {arm: quality(e) for arm, e in exps.items()}
-        # Shared base check: the same base artifact (body) in both experiments.
+        # Shared base check: the same base artifact in every experiment.
         base_keys = [k for k in arts['graph'] if k[3] == 'tracetoon-baseline']
-        same = sum(1 for k in base_keys if arts['relational'].get(k, {}).get('startedAt') == arts['graph'][k].get('startedAt'))
-        lines += [f'## {provider}', '', f'Shared base: {same}/{len(base_keys)} base writes identical in both experiments. '
-                  f'Judging (evaluation overhead, not an arm cost): graph experiment ${judge_cost(exps["graph"]):.2f}, relational experiment ${judge_cost(exps["relational"]):.2f}.', '']
+        shared = ', '.join(
+            f"{arm} {sum(1 for k in base_keys if arts[arm].get(k, {}).get('startedAt') == arts['graph'][k].get('startedAt'))}/{len(base_keys)}"
+            for arm in arms if arm != 'graph')
+        lines += [f'## {provider}', '', f'Shared base with the graph experiment: {shared}. '
+                  'Judging (evaluation overhead, not an arm cost): '
+                  + ', '.join(f'{arm} ${judge_cost(e):.2f}' for arm, e in exps.items()) + '.', '']
         models = sorted({k[0] for k in arts['graph']})
         for model in models:
             lines += [f'### {model}', '',
                       '| arm | W-L-T vs base | claim cov | context cov | factual err | unsupported | evidence gaps | writer $ (total) | input tok (median) | cached in (median) | output tok (median) | writer s (median) | lookups (median) | engine ms (median) | wasm MB/load |',
                       '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|']
             rows = {}
-            for arm in ['base'] + ARMS:
+            for arm in ['base'] + arms:
                 src = 'graph' if arm == 'base' else arm
                 system = 'tracetoon-baseline' if arm == 'base' else 'tracetoon-candidate'
                 metas = [m for k, m in arts[src].items() if k[0] == model and k[3] == system]
@@ -146,29 +163,30 @@ def main():
                 lines.append(
                     f"| {arm} (n={r['n']}) | {wlt} | " + ' | '.join(fmt(q.get(k), 3) for k in METRICS)
                     + f" | {fmt(r['cost'], 2) if r['cost'] is not None else 'not reported'} | {fmt(r['in'])} | {fmt(r['cached'])} | {fmt(r['out'])} | {fmt(r['secs'], 1)} | {fmt(r['lookups'])} | {fmt(r['eng'], 1)} | {fmt(r['wasm'], 1)} |")
-            # Paired: same base sample, graph's verdict vs relational's.
-            better = worse = same_ = 0
-            for k, v in verd['graph'].items():
-                if k[0] != model or k not in verd['relational']:
-                    continue
-                d = v - verd['relational'][k]
-                better += d > 0
-                worse += d < 0
-                same_ += d == 0
-            lines += ['', f'Paired on the same base sample: graph better than relational in {better} cases, worse in {worse}, equal in {same_}.', '']
-            g, rl = rows['graph'], rows['relational']
-            if g['in'] and rl['in']:
-                saving = 1 - g['in'] / rl['in']
-                a_checks.append((provider, model, saving, better, worse, g['q'].get('claimCoverage'), rl['q'].get('claimCoverage'),
-                                 g['q'].get('factualErrors'), rl['q'].get('factualErrors')))
-    lines += ['## Outcome A check (fixed in advance)', '',
-              'A holds where graph quality is not worse than relational (paired verdicts not worse, factual errors no higher) and graph median input tokens are at least 15% lower; or graph is clearly better at equal cost.', '',
-              '| provider | model | graph input-token saving vs relational | paired better/worse | claim cov g/r | factual err g/r | A |',
-              '|---|---|---|---|---|---|---|']
-    for p, m, s, b, w, cg, cr, fg, fr in a_checks:
-        notworse = b >= w and (fg or 0) <= (fr or 0) + 1e-9
-        holds = (notworse and s >= 0.15) or (b > w and abs(s) < 0.15)
-        lines.append(f'| {p} | {m} | {s:+.0%} | {b}/{w} | {fmt(cg, 3)}/{fmt(cr, 3)} | {fmt(fg, 3)}/{fmt(fr, 3)} | {"yes" if holds else "no"} |')
+            lines.append('')
+            pair_res = {}
+            for x, y in PAIRS:
+                if x in arms and y in arms:
+                    b, w, e = paired(verd, x, y, model)
+                    pair_res[(x, y)] = (b, w)
+                    lines.append(f'Paired on the same base sample: {x} better than {y} in {b} cases, worse in {w}, equal in {e}.')
+            lines.append('')
+            for arm in [a for a in ('graph', 'hybrid') if a in arms and 'relational' in arms]:
+                g, rl = rows[arm], rows['relational']
+                if g['in'] and rl['in']:
+                    b, w = pair_res[(arm, 'relational')]
+                    checks.append((provider, model, arm, 1 - g['in'] / rl['in'], b, w, g['q'].get('factualErrors'), rl['q'].get('factualErrors'),
+                                   pair_res.get(('hybrid', 'graph')) if arm == 'hybrid' else None))
+    lines += ['## Outcome A checks (fixed in advance)', '',
+              'graph (first attempt): A holds where graph is not worse than relational on paired verdicts, has no more factual errors, and uses at least 15% fewer median input tokens; or is clearly better at equal cost.',
+              'hybrid (second attempt): A holds where hybrid is not worse than relational on paired verdicts (better ≥ worse), has no more factual errors, and uses at least 15% fewer median input tokens. Second criterion: hybrid beats graph on paired verdicts.', '',
+              '| provider | model | arm | input-token saving vs relational | paired vs relational (better/worse) | factual err arm/relational | A | hybrid vs graph (better/worse) |',
+              '|---|---|---|---|---|---|---|---|']
+    for p, m, arm, s, b, w, fa, fr, hg in checks:
+        notworse = b >= w and (fa or 0) <= (fr or 0) + 1e-9
+        holds = (notworse and s >= 0.15) or (arm == 'graph' and b > w and abs(s) < 0.15)
+        hgs = f'{hg[0]}/{hg[1]} ({"beats" if hg[0] > hg[1] else "does not beat"})' if hg else '—'
+        lines.append(f'| {p} | {m} | {arm} | {s:+.0%} | {b}/{w} | {fmt(fa, 3)}/{fmt(fr, 3)} | {"yes" if holds else "no"} | {hgs} |')
     text = '\n'.join(lines) + '\n'
     print(text)
     if md_out:
