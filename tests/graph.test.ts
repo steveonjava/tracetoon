@@ -21,6 +21,9 @@ import { applyBrief, shownCommand, validationSection } from '../src/graph/briefR
 import { git } from '../src/util/exec.ts';
 import { ClaudeLog, makeRepo, tempDir } from './helpers.ts';
 
+// These tests cover the graph-style brief; the relational arm (this branch's default) is in sql.test.ts.
+process.env.TRACETOON_EVIDENCE_MODE = 'brief';
+
 const CLI = process.env.TRACETOON_TEST_CLI ?? resolve(import.meta.dir, '../src/cli.ts');
 /** The source, the bundle (TRACETOON_TEST_CLI) or a compiled binary (TRACETOON_TEST_BINARY). */
 const PROGRAM = process.env.TRACETOON_TEST_BINARY

@@ -117,7 +117,14 @@ export function loadExtras(db: Exec, graph: EvidenceGraph): void {
           ? p.excerpt
           : n.label === 'Commit'
             ? [p.subject, p.body].filter(Boolean).join('\n')
-            : undefined;
+            : n.label === 'Hunk'
+              ? // The changed lines' words (the graph keeps words, not line text), file and symbols.
+                [
+                  p.file,
+                  ...((p.touched as string[]) ?? []),
+                  ...((p.words as string[]) ?? []),
+                ].join(' ')
+              : undefined;
     if (typeof text === 'string' && text) fts({ kind: n.label, id: n.id, text });
   }
 }

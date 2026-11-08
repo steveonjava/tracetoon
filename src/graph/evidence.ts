@@ -18,6 +18,7 @@ import { annotateDigest, deriveFromGraphJson, type GraphDerived } from './derive
 import type { EvidenceGraph } from './model.ts';
 import { evidenceEngine, withEvidence } from './store.ts';
 import { SqlEngine } from '../sql/engine.ts';
+import { relationalGuide, relationalMode, relationalParts } from '../sql/relational.ts';
 import { briefParts, findQuery } from './queries.ts';
 import type { BriefParts } from './briefRender.ts';
 import { toToon } from './toon.ts';
@@ -174,14 +175,22 @@ export function loadGraphReview(run: Run): GraphDerived['review'] | undefined {
 /** The brief as data, for `render` to write the Validation section and check ref tags. */
 export function graphBriefParts(graph: EvidenceGraph): BriefParts | undefined {
   try {
-    return withEvidence(graph, (g) => briefParts(g));
+    return withEvidence(graph, (g) =>
+      relationalMode() ? relationalParts(g) : briefParts(g),
+    );
   } catch {
     return undefined;
   }
 }
 
-export function graphBrief(graph: EvidenceGraph, rowCap = 60): string | undefined {
+export function graphBrief(
+  graph: EvidenceGraph,
+  rowCap = 60,
+  run = '<id>',
+): string | undefined {
   try {
+    // The relational arm prints the database guide in the brief's place.
+    if (relationalMode()) return withEvidence(graph, (g) => relationalGuide(g, run));
     const sections = withEvidence(graph, (g) => findQuery('brief')!.run(g, []));
     return toToon(sections, { rowCap }).trimEnd();
   } catch {

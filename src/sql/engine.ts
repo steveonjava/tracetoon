@@ -17,7 +17,7 @@ import type { EvidenceGraph } from '../graph/model.ts';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { assetsDir } from '../util/assets.ts';
-import { measured } from '../util/profile.ts';
+import { count, measured } from '../util/profile.ts';
 import { loadEvidence, type ColumnKinds } from './load.ts';
 
 interface Stmt {
@@ -257,6 +257,17 @@ export class SqlEngine implements EvidenceDb {
   }
 
   static load(graph: EvidenceGraph): SqlEngine {
+    const started = performance.now();
+    count('evidence.loads');
+    count(`evidence.engine.sqlite-${sqlDriver()}`);
+    try {
+      return SqlEngine.loadNow(graph);
+    } finally {
+      count('evidence.loadMs', Math.round(performance.now() - started));
+    }
+  }
+
+  private static loadNow(graph: EvidenceGraph): SqlEngine {
     return measured('sql.load', () => {
       const engine = new SqlEngine();
       engine.kinds = loadEvidence(engine.db, graph);
@@ -278,6 +289,20 @@ export class SqlEngine implements EvidenceDb {
    * by `json` for aggregates (json_group_array).
    */
   sql(sql: string, params?: Record<string, unknown>, json: string[] = []): QueryResult {
+    const started = performance.now();
+    try {
+      return this.sqlNow(sql, params, json);
+    } finally {
+      count('evidence.queries');
+      count('evidence.queryMs', Math.round((performance.now() - started) * 1000) / 1000);
+    }
+  }
+
+  private sqlNow(
+    sql: string,
+    params?: Record<string, unknown>,
+    json: string[] = [],
+  ): QueryResult {
     let stmt: Stmt;
     let rows: Record<string, unknown>[];
     try {
@@ -332,6 +357,8 @@ export class SqlEngine implements EvidenceDb {
   }
 
   close(): void {
+    // WebAssembly memory, in KB, summed over loads (divide by evidence.loads); 0 when native.
+    count('evidence.wasmKB', Math.round((this.db.memoryBytes?.() ?? 0) / 1024));
     try {
       this.db.close();
     } catch {

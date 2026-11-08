@@ -9,7 +9,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CypherliteDb, initSync } from './vendor/cypherlite.js';
 import { assetsDir } from '../util/assets.ts';
-import { measured } from '../util/profile.ts';
+import { count, measured } from '../util/profile.ts';
 import type { EvidenceGraph, NodeLabel, Value } from './model.ts';
 import { GraphError, type EvidenceDb, type Q, type QueryResult } from './db.ts';
 
@@ -84,6 +84,17 @@ export class GraphEngine implements EvidenceDb {
 
   /** Load a graph: one batched statement per label and relationship shape. */
   static load(graph: EvidenceGraph): GraphEngine {
+    const started = performance.now();
+    count('evidence.loads');
+    count('evidence.engine.cypherlite');
+    try {
+      return GraphEngine.loadNow(graph);
+    } finally {
+      count('evidence.loadMs', Math.round(performance.now() - started));
+    }
+  }
+
+  private static loadNow(graph: EvidenceGraph): GraphEngine {
     return measured('graph.load', () => {
       const engine = new GraphEngine();
       const byLabel = new Map<NodeLabel, Record<string, Value>[]>();
@@ -91,11 +102,11 @@ export class GraphEngine implements EvidenceDb {
         byLabel.set(n.label, [...(byLabel.get(n.label) ?? []), { ...n.props, id: n.id }]);
       for (const [label, rows] of byLabel) {
         if (!LABEL.test(label)) throw new GraphError(`Bad label ${label}`);
-        engine.run(
+        engine.runNow(
           `CREATE INDEX ${label.toLowerCase()}_id IF NOT EXISTS FOR (n:${label}) ON (n.id)`,
         );
         for (let i = 0; i < rows.length; i += BATCH)
-          engine.run(`UNWIND $rows AS r CREATE (n:${label}) SET n += r`, {
+          engine.runNow(`UNWIND $rows AS r CREATE (n:${label}) SET n += r`, {
             rows: rows.slice(i, i + BATCH),
           });
       }
@@ -115,7 +126,7 @@ export class GraphEngine implements EvidenceDb {
         if (![from, type.replace(/_/g, ''), to].every((x) => /^[A-Za-z]+$/.test(x)))
           throw new GraphError(`Bad relationship ${key}`);
         for (let i = 0; i < rows.length; i += BATCH)
-          engine.run(
+          engine.runNow(
             `UNWIND $rows AS r MATCH (a:${from} {id: r.from}), (b:${to} {id: r.to}) CREATE (a)-[x:${type}]->(b) SET x += r.props`,
             { rows: rows.slice(i, i + BATCH) },
           );
@@ -126,6 +137,16 @@ export class GraphEngine implements EvidenceDb {
 
   /** Run one statement. Errors carry the engine's own message. */
   run(q: Q, params?: Record<string, unknown>): QueryResult {
+    const started = performance.now();
+    try {
+      return this.runNow(q, params);
+    } finally {
+      count('evidence.queries');
+      count('evidence.queryMs', Math.round((performance.now() - started) * 1000) / 1000);
+    }
+  }
+
+  private runNow(q: Q, params?: Record<string, unknown>): QueryResult {
     if (this.dead) throw this.dead;
     const cypher = typeof q === 'string' ? q : q.cypher;
     let raw: string;
@@ -152,6 +173,8 @@ export class GraphEngine implements EvidenceDb {
   }
 
   close(): void {
+    // Peak WebAssembly memory, in KB, summed over loads (divide by evidence.loads).
+    count('evidence.wasmKB', Math.round((graphWasmMemoryBytes() ?? 0) / 1024));
     try {
       this.db.free();
     } catch {

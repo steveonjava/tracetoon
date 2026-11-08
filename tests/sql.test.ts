@@ -23,6 +23,8 @@ function setup() {
     ANTIGRAVITY_HOME: tempDir('tracetoon-gemini-'),
     GEMINI_HOME: tempDir('tracetoon-gemini-'),
     TRACETOON_CONFIG: join(tempDir('tracetoon-env-'), 'config.json'),
+    // This branch's default; set explicitly so it holds whatever else ran in this process.
+    TRACETOON_EVIDENCE_MODE: 'relational',
   };
   const cli = (cwd: string, ...args: string[]) => cliWith({}, cwd, ...args);
   const cliWith = (extra: Record<string, string>, cwd: string, ...args: string[]) => {
@@ -353,5 +355,80 @@ describe('shell reads', () => {
     expect(of('ls src docs')).toEqual([]);
     expect(of('head -40 README.md')).toEqual([['shell:head', '/r/README.md', null]]);
     expect(of('rg -n "\\"Hunk\\(" src')).toEqual([['shell:rg', '/r/src', '"Hunk\\(']]);
+  });
+});
+
+describe('relational arm (no brief)', () => {
+  test('prepare gives the database guide; render writes Validation and checks ids and commits', () => {
+    const { claudeHome, cli } = setup();
+    const repo = makeRepo();
+    new ClaudeLog(repo.root)
+      .prompt('Add a greet helper that says hello by name')
+      .write(join(repo.root, 'src/greet.ts'), GREET)
+      .bash('bun test', '1 pass\n0 fail')
+      .prompt('Now add farewell too')
+      .write(join(repo.root, 'src/farewell.ts'), FAREWELL)
+      .save(claudeHome, 'relational');
+    mkdirSync(join(repo.root, 'src'), { recursive: true });
+    writeFileSync(join(repo.root, 'src/greet.ts'), GREET);
+    git(repo.root, ['add', '.']);
+    git(repo.root, [
+      'commit',
+      '-q',
+      '-m',
+      'feat: greet',
+      '-m',
+      'Greets people by their name.',
+    ]);
+    writeFileSync(join(repo.root, 'src/farewell.ts'), FAREWELL);
+    git(repo.root, ['add', '.']);
+    git(repo.root, [
+      'commit',
+      '-q',
+      '-m',
+      'feat: farewell',
+      '-m',
+      'Says goodbye in a friendly way.',
+    ]);
+    const prepared = cli(repo.root, '--json', 'prepare', '--offline');
+    expect(prepared.code).toBe(0);
+    const run = prepared.json.run;
+    expect(prepared.json.brief).toBeUndefined();
+    expect(prepared.json.evidenceGuide).toContain('tracetoon query --sql');
+    expect(prepared.json.evidenceGuide).toContain('Starter queries:');
+    expect(prepared.json.next).toContain('evidence database');
+    const sql = (q: string) =>
+      cli(repo.root, '--json', 'query', '--sql', q, '--run', run).json.sections[0].rows;
+    const greet = sql(
+      `SELECT ch.change AS id FROM change_hunk ch JOIN hunks h ON h.id = ch.hunk WHERE h.file = 'src/greet.ts'`,
+    )[0].id;
+    const commits = sql('SELECT id, subject FROM commits ORDER BY t');
+    const greetCommit = commits.find((c: any) => c.subject === 'feat: greet').id;
+    // Search reaches prompts and changed-line words.
+    const found = cli(repo.root, '--json', 'query', 'search', 'greet', '--run', run);
+    expect(found.json.sections[0].rows.map((r: any) => r.kind)).toContain('Prompt');
+    const runDir = prepared.json.runDir;
+    writeFileSync(join(runDir, 'title.txt'), 'Add greet and farewell helpers');
+    writeFileSync(
+      join(runDir, 'body.md'),
+      [
+        `Adds a greet helper that says hello by name. [${greet}, S1, commit:${greetCommit}]`,
+        'Adds a farewell helper too. [Z9]',
+        '',
+        '<!-- tracetoon:validation -->',
+        '',
+      ].join('\n'),
+    );
+    const r = cli(repo.root, '--json', 'render', '--run', run, '--no-comic', '--lean');
+    expect(r.code).toBe(0);
+    const body = readFileSync(join(runDir, 'final-body.md'), 'utf8');
+    expect(body).toContain('## Validation');
+    expect(body).not.toContain('[S1');
+    expect(r.json.briefCheck.unknownRefs).toEqual(['Z9']);
+    // Every commit-message sentence should be covered; the farewell commit's is not.
+    expect(r.json.briefCheck.uncovered.join(' ')).toContain(
+      'Says goodbye in a friendly way.',
+    );
+    expect(r.json.briefCheck.uncovered.join(' ')).not.toContain('Greets people');
   });
 });

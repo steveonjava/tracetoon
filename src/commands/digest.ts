@@ -1,3 +1,4 @@
+import { relationalMode, relationalNext } from '../sql/relational.ts';
 import { createHash } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -180,7 +181,7 @@ export function digestCmd(
   const path = writeJson(run, 'digest.json', digest);
   writeJson(run, 'digest-full.json', full);
   saveGraph(run, graph);
-  const brief = graph.graph ? graphBrief(graph.graph) : undefined;
+  const brief = graph.graph ? graphBrief(graph.graph, 60, run.id) : undefined;
   writeFileSync(join(run.dir, 'evidence-notes.md'), evidenceNotes(full, brief), 'utf8');
   const captured = submissionSnapshot(truth);
   writeJson(run, 'submission.json', captured);
@@ -408,21 +409,34 @@ export function prepareCmd(cwd: string, opts: DigestOpts) {
       ? {
           path: 'evidence-graph.json',
           stats: prepared.graph.stats,
-          drafter: ['brief', 'why <path>', 'turn <S#>', 'unverified'],
+          drafter: relationalMode()
+            ? ['schema', 'search <words>', '--sql "SELECT …"']
+            : ['brief', 'why <path>', 'turn <S#>', 'unverified'],
           reviewer: ['unverified', 'unexplained', 'why <path|H#>', 'stale <R#>'],
         }
       : null,
-    instructions:
-      'Use fresh role contexts where supported. Read the cold-read packet before the reviewer evidence. Expand referenced evidence in batches; missing evidence remains unknown. Drafter and reviewer: ask the evidence graph with `tracetoon query <name> --run <id>` (start with `brief`) before reading the whole patch; its diff refs are citable as change-map behaviorChecks evidence.',
+    instructions: relationalMode()
+      ? 'Use fresh role contexts where supported. Read the cold-read packet before the reviewer evidence. Expand referenced evidence in batches; missing evidence remains unknown. Drafter and reviewer: look things up in the evidence database with `tracetoon query --sql "SELECT …" --run <id>` and `tracetoon query search <words> --run <id>` (tables: `tracetoon query schema`) before reading the whole patch; hunk diff refs are citable as change-map behaviorChecks evidence.'
+      : 'Use fresh role contexts where supported. Read the cold-read packet before the reviewer evidence. Expand referenced evidence in batches; missing evidence remains unknown. Drafter and reviewer: ask the evidence graph with `tracetoon query <name> --run <id>` (start with `brief`) before reading the whole patch; its diff refs are citable as change-map behaviorChecks evidence.',
   };
   writeJson(prepared.run, 'role-packets.json', roles);
   emit(
     opts,
     {
       run: prepared.run.id,
-      ...(prepared.graph ? { next: graphNext(prepared.run.id) } : {}),
+      ...(prepared.graph
+        ? {
+            next: relationalMode()
+              ? relationalNext(prepared.run.id)
+              : graphNext(prepared.run.id),
+          }
+        : {}),
       // One JSON line, so piping through `head` still shows the whole map.
-      ...(prepared.brief ? { brief: prepared.brief } : {}),
+      ...(prepared.brief
+        ? relationalMode()
+          ? { evidenceGuide: prepared.brief }
+          : { brief: prepared.brief }
+        : {}),
       runDir: prepared.run.dir,
       rolePackets: join(prepared.run.dir, 'role-packets.json'),
       digestPath: join(prepared.run.dir, 'digest.json'),
@@ -432,8 +446,12 @@ export function prepareCmd(cwd: string, opts: DigestOpts) {
     () =>
       [
         `Run ${prepared.run.id}: digest, context and role-packets.json prepared from one snapshot.`,
-        prepared.graph ? `Next: ${graphNext(prepared.run.id)}` : '',
-        prepared.brief ? `Evidence brief:\n${prepared.brief}` : '',
+        prepared.graph
+          ? `Next: ${relationalMode() ? relationalNext(prepared.run.id) : graphNext(prepared.run.id)}`
+          : '',
+        prepared.brief
+          ? `${relationalMode() ? 'Evidence database guide' : 'Evidence brief'}:\n${prepared.brief}`
+          : '',
       ]
         .filter(Boolean)
         .join('\n'),

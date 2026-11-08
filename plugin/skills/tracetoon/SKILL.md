@@ -156,7 +156,25 @@ reviewer separate.
       three rounds, until it reports nothing left to fix.
    6. Draw a comic if one is wanted (step 5, without a separate reviewer), then
       publish (step 7).
-3. **Context** (full path; the lean path in 2a goes from step 2 to step 7).
+   2b. **Lean evidence-database path** (whenever `prepare --json` returns an
+     `evidenceGuide` instead of a `brief`). The same as 2a, but nothing is
+     selected for you: the guide lists the evidence tables and starter queries.
+   1. Read the `evidenceGuide`, then look up what the description needs with
+      `tracetoon query --sql "SELECT …" --run <id>` and `tracetoon query search
+      <words> --run <id>`: the goal request, the change units (`changes`, their
+      `hunks`), each commit's message sentences (`commit_claims`), the requests
+      behind each change (`change_prompt`), added tests (`hunks.tests`), and
+      what the checks did (`runs`). Follow the guide's rules; never copy them.
+   2. Write `title.txt` and `body.md` in the same order as 2a (problem, one part
+      per change unit, tests, consequences and open points, where to start
+      reviewing, links, housekeeping). Call a symbol new only if it is in
+      `hunks.fresh`; quote a `hunks.pairs` line only verbatim.
+   3. Tag every factual sentence with the ids of the rows it rests on:
+      `[CH1, S1]`, `[commit:<sha>#2]`, `[H3]`.
+   4. Steps 4–6 of 2a unchanged: the validation marker, `tracetoon render --lean
+      --json --run <id>` until it lists nothing (it also lists commit-message
+      sentences no sentence covers), then comic and publish.
+3. **Context** (full path; the lean paths in 2a and 2b go from step 2 to step 7).
    Read the prepared `context.json`; do not repeat preparation. Note the PR template, existing PR,
    settings, AI policy, and `comic.recentComics` (compact creative choices from
    recent comics, so this one can differ; missing legacy fields are unknown).

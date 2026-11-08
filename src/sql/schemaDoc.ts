@@ -44,6 +44,18 @@ export const SQL_SCHEMA_DOC = {
     change_commit: '(change, "commit"): commits whose lines are in the change',
     facts:
       'view: decisions and plans together (kind, id, t, text, approved, excerpt, session)',
+    reads:
+      '(id X#, t, session, prompt, tool, file, pattern, "inPr"): files the agent read and searches it ran, with the turn (prompt) they happened in',
+    usage:
+      '(t, session, prompt, input, output, "cacheRead", "cacheWrite"): tokens per model response, by turn',
+    run_cycles:
+      'view (cmd_key, session, failed_run, failures, passed_run, edits, files): a check that failed, the edits after it, and the next passing run of the same command',
+    turn_effort:
+      'view (prompt, session, t, responses, output_tokens, input_tokens, last_t, edits, dead_ends, runs, reads): what each prompt turn cost and did',
+    change_effort:
+      'view (change, turns, surviving_edits, dead_ends_in_turns, runs_in_turns, output_tokens, reads_in_turns)',
+    evidence_fts:
+      'FTS5 (kind, id, text) over prompts, decisions, plans, commits, commit_claims and hunks (changed-line words): use `tracetoon query search <words>`',
     turn_facts: 'view: (kind, id, prompt) for decisions and plans in a turn',
   },
   notes: [
