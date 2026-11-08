@@ -17,7 +17,7 @@ export interface Mismatch {
 }
 
 /** Every question a run can be asked: each named query with each argument it takes. */
-function questions(graph: EvidenceGraph): [string, (g: EvidenceDb) => unknown][] {
+export function questions(graph: EvidenceGraph): [string, (g: EvidenceDb) => unknown][] {
   const ids = (label: string) =>
     graph.nodes.filter((n) => n.label === label).map((n) => n.id);
   const out: [string, (g: EvidenceDb) => unknown][] = [

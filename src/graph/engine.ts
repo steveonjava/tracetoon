@@ -25,6 +25,12 @@ interface Envelope {
 }
 
 let initialized: true | Error | undefined;
+let wasmMemory: WebAssembly.Memory | undefined;
+
+/** Bytes of WebAssembly linear memory cypherlite holds (it only grows), for engine benchmarks. */
+export function graphWasmMemoryBytes(): number | undefined {
+  return wasmMemory?.buffer.byteLength;
+}
 
 function init(): void {
   if (initialized === true) return;
@@ -38,7 +44,7 @@ function init(): void {
     throw initialized;
   }
   try {
-    initSync({ module: readFileSync(path) });
+    wasmMemory = initSync({ module: readFileSync(path) }).memory;
     initialized = true;
   } catch (e) {
     initialized = new GraphError(
