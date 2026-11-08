@@ -16,7 +16,7 @@ check → review → final render → publish. Write the description yourself, i
      says it.
    - Then what changed, grouped by behavior rather than file by file,
      covering each commit-message sentence. Name the file a sentence's
-     `implementedBy` gives; where it is empty, describe the behavior without
+     `implementedBy` or its `→ H#` hunks give; where it has neither, describe the behavior without
      naming a file. Say what code does instead of listing identifiers; call a
      symbol new only if it is in `newSymbols`.
    - The consequences: what changes for users or callers, the riskiest part,
@@ -26,10 +26,10 @@ check → review → final render → publish. Write the description yourself, i
      start reviewing with, the riskiest change and the feedback you want, any
      PR or issue links the commits give, and one closing line for
      `housekeeping`.
-   State plainly what the patch shows. Attribute only what it can't show (a
-   reason, a result, a remark like "local only") to the request or commit
-   message that says it; never invent a motive. Don't repeat what the
-   Validation section says about runs.
+     State plainly what the patch shows. Attribute only what it can't show (a
+     reason, a result, a remark like "local only") to the request or commit
+     message that says it; never invent a motive. Don't repeat what the
+     Validation section says about runs.
 3. Tag every sentence that states a fact with the brief refs it rests on, at
    the end of the sentence: `[CH1, S1]`, `[T1]`, `[commit:<sha>#2]`. A
    sentence you can't tag doesn't belong in the PR. Render removes the tags.

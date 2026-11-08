@@ -1,8 +1,9 @@
 /** `tracetoon query`: ask a run's evidence graph a named question or read-only Cypher. */
 import { GraphError, withGraph } from '../graph/engine.ts';
-import { loadGraph } from '../graph/evidence.ts';
+import { graphBrief, loadGraph } from '../graph/evidence.ts';
 import { findQuery, QUERIES, rawQuery, type Section } from '../graph/queries.ts';
 import { toToon } from '../graph/toon.ts';
+import { briefLayout } from '../graph/layout.ts';
 import { assertRunOwner, findRun } from '../run.ts';
 import { count } from '../util/profile.ts';
 import { repository } from '../workflow/state.ts';
@@ -69,7 +70,14 @@ export function queryCmd(cwd: string, words: string[], opts: QueryOpts): void {
     throw e;
   }
   count('graph.queries');
-  emit(opts, { run: run.id, query: named?.name ?? 'cypher', sections }, () =>
-    toToon(sections, { rowCap: opts.all ? Infinity : ROW_CAP }),
+  // The brief reads the same as in `prepare`: the neighborhood layout when it is on.
+  const briefText =
+    named?.name === 'brief' && briefLayout() === 'neighborhood'
+      ? graphBrief(graph)
+      : undefined;
+  emit(
+    opts,
+    { run: run.id, query: named?.name ?? 'cypher', sections },
+    () => briefText ?? toToon(sections, { rowCap: opts.all ? Infinity : ROW_CAP }),
   );
 }

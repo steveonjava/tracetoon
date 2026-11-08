@@ -6,6 +6,7 @@
 import { GraphError, type GraphEngine } from './engine.ts';
 import { shownCommand } from './briefRender.ts';
 import { SCHEMA_DOC } from './model.ts';
+import { briefLayout } from './layout.ts';
 
 export interface Section {
   title: string;
@@ -267,8 +268,83 @@ export function listsSeveral(text: string): boolean {
  * wrong file misleads more than none (dev14: every Terra error on pr5).
  */
 export function describedHunks(hunks: Record<string, unknown>[], text: string): string[] {
+  if (listsSeveral(text)) return [];
+  const scored = scoredHunks(hunks, text);
+  // Best hunk per file.
+  const byFile = new Map<string, number>();
+  for (const x of scored) byFile.set(x.file, Math.max(byFile.get(x.file) ?? 0, x.score));
+  const ranked = [...byFile].sort((a, b) => b[1] - a[1]);
+  if (!ranked.length) return [];
+  // Two files that fit about equally: say neither rather than guess.
+  if (ranked.length > 1 && ranked[1]![1] >= ranked[0]![1] * 0.8) return [];
+  return [ranked[0]![0]];
+}
+
+const isVersionFile = (f: string) =>
+  /(^|\/)(VERSION|package\.json|plugin\.json|version\.\w+)$/.test(f);
+const isCodeFile = (f: string) =>
+  !/(^|\/)(tests?|__tests__|spec|docs?)\/|\.(test|spec)\.\w+$|\.(md|mdx|txt)$/.test(f);
+const ABOUT_TESTS_OR_DOCS = /\btests?\b|\bdocs?\b|\bguide\b|\bskill\b/i;
+
+/**
+ * The hunks a commit sentence describes, among that commit's own hunks: the
+ * neighborhood brief's `→ H#`. As conservative as `describedHunks`: nothing for
+ * a sentence that lists several behaviors, nothing when two hunks in different
+ * files fit about equally. A commit with a single code hunk links a sentence
+ * about code to it; two close hunks in one file are both linked.
+ */
+export function linkedHunks(hunks: Record<string, unknown>[], text: string): string[] {
+  if (!hunks.length) return [];
+  // A file the sentence names outright: its best-fitting hunk (or its first).
+  const tokens = new Set(
+    text.match(/[\w./-]+/g)?.map((t) => t.replace(/[.]+$/, '')) ?? [],
+  );
+  const named = uniq(hunks.map((h) => String(h.file))).filter(
+    (f) =>
+      tokens.has(f) ||
+      (f.split('/').pop()!.includes('.') && tokens.has(f.split('/').pop()!)),
+  );
+  if (named.length && named.length <= 2) {
+    const scored = scoredHunks(hunks, text);
+    return named.map((f) => {
+      const own = scored.filter((x) => x.file === f).sort((a, b) => b.score - a.score);
+      return own[0]?.id ?? String(hunks.find((h) => String(h.file) === f)!.id);
+    });
+  }
+  // A sentence listing several behaviors: each listed part on its own, up to three hunks.
+  if (listsSeveral(text)) {
+    const parts = text
+      .replace(/\([^)]*\)/g, '')
+      .split(/[,;]|\band\b/)
+      .filter((p) => p.trim().split(/\s+/).length >= 2);
+    return uniq(parts.flatMap((p) => linkedHunks(hunks, p).slice(0, 1))).slice(0, 3);
+  }
+  const version = /\bversion|\bbump/i.test(text);
+  const code = hunks.filter(
+    (h) => isCodeFile(String(h.file)) && (version || !isVersionFile(String(h.file))),
+  );
+  const ranked = scoredHunks(hunks, text).sort((a, b) => b.score - a.score);
+  // One code hunk in the commit: a sentence about code that shares words with it.
+  if (
+    code.length === 1 &&
+    !version &&
+    !ABOUT_TESTS_OR_DOCS.test(text) &&
+    ranked.some((x) => x.id === String(code[0]!.id))
+  )
+    return [String(code[0]!.id)];
+  if (!ranked.length) return [];
+  if (ranked.length > 1 && ranked[1]!.score >= ranked[0]!.score * 0.8)
+    return ranked[1]!.file === ranked[0]!.file ? [ranked[0]!.id, ranked[1]!.id] : [];
+  return [ranked[0]!.id];
+}
+
+/** Each hunk's fit to a sentence, after the version and code-first filters (shared by both link levels). */
+function scoredHunks(
+  hunks: Record<string, unknown>[],
+  text: string,
+): { id: string; file: string; score: number }[] {
   const words = uniq(proseWords(text).map(stem));
-  if (!words.length || !hunks.length || listsSeveral(text)) return [];
+  if (!words.length || !hunks.length) return [];
   const has = hunks.map((h) => new Set(((h.words as string[]) ?? []).map(stem)));
   const named = hunks.map(
     (h) =>
@@ -290,6 +366,7 @@ export function describedHunks(hunks: Record<string, unknown>[], text: string): 
   const avg = has.reduce((n, x) => n + x.size, 0) / has.length || 1;
   let scored = hunks
     .map((h, i) => ({
+      id: String(h.id),
       file: String(h.file),
       score:
         words.reduce(
@@ -305,25 +382,11 @@ export function describedHunks(hunks: Record<string, unknown>[], text: string): 
     .filter((x) => x.hits >= Math.min(2, words.length));
   // Version files match any sentence with a number; they belong only to version sentences.
   if (!/\bversion|\bbump/i.test(text))
-    scored = scored.filter(
-      (x) => !/(^|\/)(VERSION|package\.json|plugin\.json|version\.\w+)$/.test(x.file),
-    );
+    scored = scored.filter((x) => !isVersionFile(x.file));
   // Tests and docs describe behavior too; the code that does it comes first.
-  const isCode = (f: string) =>
-    !/(^|\/)(tests?|__tests__|spec|docs?)\/|\.(test|spec)\.\w+$|\.(md|mdx|txt)$/.test(f);
-  if (
-    scored.some((x) => isCode(x.file)) &&
-    !/\btests?\b|\bdocs?\b|\bguide\b|\bskill\b/i.test(text)
-  )
-    scored = scored.filter((x) => isCode(x.file));
-  // Best hunk per file.
-  const byFile = new Map<string, number>();
-  for (const x of scored) byFile.set(x.file, Math.max(byFile.get(x.file) ?? 0, x.score));
-  const ranked = [...byFile].sort((a, b) => b[1] - a[1]);
-  if (!ranked.length) return [];
-  // Two files that fit about equally: say neither rather than guess.
-  if (ranked.length > 1 && ranked[1]![1] >= ranked[0]![1] * 0.8) return [];
-  return [ranked[0]![0]];
+  if (scored.some((x) => isCodeFile(x.file)) && !ABOUT_TESTS_OR_DOCS.test(text))
+    scored = scored.filter((x) => isCodeFile(x.file));
+  return scored.map(({ id, file, score }) => ({ id, file, score }));
 }
 
 /**
@@ -532,6 +595,76 @@ export function briefParts(g: GraphEngine): { sections: Section[]; unchecked: st
         implementedBy: implementedBy(String(k.commit), m.text),
       });
   }
+  // Neighborhood layout only: each hunk as a citable row with its key lines,
+  // the requests whose edits survive in it, and the commit sentences that point
+  // to it (hunk level, as conservative as implementedBy).
+  const hunkSection: Record<string, unknown>[] = [];
+  if (briefLayout() === 'neighborhood') {
+    const sentenceLinks = new Map<string, string[]>();
+    for (const k of said) {
+      const own = commitHunks.get(String(k.commit)) ?? [];
+      const texts: [string, unknown][] = [
+        [`commit:${String(k.commit)}`, k.subject],
+        ...((k.claims as { id: string; text: string; result: boolean }[]) ?? [])
+          .filter((m) => m.id && !m.result)
+          .map((m): [string, unknown] => [m.id, m.text]),
+      ];
+      for (const [ref, text] of texts)
+        for (const h of linkedHunks(own, String(text ?? '')))
+          sentenceLinks.set(h, uniq([...(sentenceLinks.get(h) ?? []), ref]));
+    }
+    const survival = new Map<string, { lines: number; prompts: Set<string> }>();
+    for (const r of g.run(
+      `MATCH (h:Hunk)<-[s:SURVIVES_IN]-(e:Edit)-[:IN_SESSION]->(:Session {band: 'included'})
+       OPTIONAL MATCH (e)-[:IN_TURN]->(p:Prompt)
+       RETURN h.id AS hunk, e.id AS edit, s.lines AS lines, p.id AS prompt`,
+    ).rows) {
+      const x =
+        survival.get(String(r.hunk)) ??
+        ({ lines: 0, prompts: new Set<string>(), edits: new Set<string>() } as {
+          lines: number;
+          prompts: Set<string>;
+          edits?: Set<string>;
+        });
+      const edits = (x as { edits?: Set<string> }).edits!;
+      if (!edits.has(String(r.edit))) {
+        edits.add(String(r.edit));
+        x.lines += Number(r.lines ?? 0);
+      }
+      if (r.prompt && seen.has(String(r.prompt))) x.prompts.add(String(r.prompt));
+      survival.set(String(r.hunk), x);
+    }
+    const hunkInfo = new Map(
+      g
+        .run(
+          'MATCH (h:Hunk) RETURN h.id AS id, h.start AS start, h.end AS end, h.code AS code',
+        )
+        .rows.map((r) => [String(r.id), r]),
+    );
+    for (const c of changeRows)
+      for (const h of hunkRows
+        .filter((x) => x.change === c.change)
+        .sort((a, b) => byDiff(String(a.diff), String(b.diff)))) {
+        const id = String(h.hunk);
+        const info = hunkInfo.get(id);
+        const sv = survival.get(id);
+        const start = Number(info?.start ?? 0);
+        const end = Number(info?.end ?? start);
+        hunkSection.push({
+          ref: id,
+          change: c.change,
+          file: h.file,
+          lines: end > start ? `L${start}-${end}` : `L${start}`,
+          scope: uniq([...((h.symbols as string[]) ?? [])]).slice(0, 3),
+          code: (info?.code as string[]) ?? [],
+          why: [...(sv?.prompts ?? [])].sort(factOrder),
+          sentences: sentenceLinks.get(id) ?? [],
+          weight: sv?.lines ?? 0,
+          role: fileRole.get(String(h.file)) ?? null,
+        });
+      }
+  }
+
   for (const r of changeRows) {
     const links = asked.filter((a) => a.change === r.change);
     (r as Record<string, unknown>).requests = links
@@ -766,7 +899,11 @@ export function briefParts(g: GraphEngine): { sections: Section[]; unchecked: st
     "State plainly what the patch shows. Attribute only what it can't show (a reason, a result, a remark about scope) to the request or commit message that says it.",
     "Don't repeat in the prose what the generated Validation section says about runs.",
     "Words a commit message puts in parentheses or asides ('local only', 'experimental', 'for now') are that commit's own remark: attribute them or leave them out; never turn them into claims about what the PR includes.",
-  ].map((rule) => ({ rule }));
+  ]
+    .map((rule) =>
+      briefLayout() === 'neighborhood' ? (NEIGHBORHOOD_RULES.get(rule) ?? rule) : rule,
+    )
+    .map((rule) => ({ rule }));
 
   // What the added tests check, by their titles.
   const tests: Record<string, unknown>[] = [];
@@ -836,6 +973,26 @@ export function briefParts(g: GraphEngine): { sections: Section[]; unchecked: st
     ),
     section('requests', ['ref', 'kind', 'text'], requests),
     section('commitMessages', ['ref', 'about', 'text', 'implementedBy'], commitText),
+    ...(briefLayout() === 'neighborhood'
+      ? [
+          section(
+            'hunks',
+            [
+              'ref',
+              'change',
+              'file',
+              'lines',
+              'scope',
+              'code',
+              'why',
+              'sentences',
+              'weight',
+              'role',
+            ],
+            hunkSection,
+          ),
+        ]
+      : []),
     section('tests', ['ref', 'file', 'titles'], tests),
     section('housekeeping', ['ref', 'what', 'files'], housekeeping),
     section(
@@ -846,6 +1003,30 @@ export function briefParts(g: GraphEngine): { sections: Section[]; unchecked: st
   ];
   return { sections, unchecked: uniq(uncheckedAll).sort() };
 }
+
+/** The rules that name the TOON layout's columns, as the neighborhood layout says them. */
+const NEIGHBORHOOD_RULES = new Map<string, string>([
+  [
+    'Tag each sentence that states a fact with the refs it rests on, e.g. `[CH1, S1]` (any ref from the brief: changes, requests, commit messages, validation rows); `render` removes the tags and lists sentences with no tag or an unknown ref.',
+    'Tag each sentence that states a fact with the refs it rests on, e.g. `[CH1, H3, S1]` (any ref in brackets in the brief: changes, hunks, requests, commit messages, validation rows); `render` removes the tags and lists sentences with no tag or an unknown ref.',
+  ],
+  [
+    'Point reviewers at files (from commitMessages.implementedBy or changes.where), not at functions, and not at the largest file.',
+    "Point reviewers at files (from a change's file lines, the hunks a sentence points to, or implementedBy), not at functions, and not at the largest file.",
+  ],
+  [
+    'Name a file or symbol for a commit-message sentence only from its implementedBy; when implementedBy is empty, describe the behavior without naming where it lives.',
+    'Name a file or symbol for a commit-message sentence only from the hunks it points to (→ H#) or its implementedBy; when it has neither, describe the behavior without naming where it lives.',
+  ],
+  [
+    'Call a symbol new, added or introduced only if it is in newSymbols; others already existed and were changed.',
+    "Call a symbol new, added or introduced only if a change's newSymbols names it; others already existed and were changed.",
+  ],
+  [
+    'State what the code did before whenever the removed lines, changes.was or the request show it, quoting values (e.g. 30 minutes → 5 minutes); never infer old behavior from the new code alone.',
+    "State what the code did before whenever a hunk's removed lines (- old ⇒ + new), a change's was or the request show it, quoting values (e.g. 30 minutes → 5 minutes); never infer old behavior from the new code alone.",
+  ],
+]);
 
 export const QUERIES: NamedQuery[] = [
   {

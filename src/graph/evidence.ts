@@ -20,6 +20,8 @@ import { withGraph } from './engine.ts';
 import { briefParts, findQuery } from './queries.ts';
 import type { BriefParts } from './briefRender.ts';
 import { toToon } from './toon.ts';
+import { renderNeighborhood } from './neighborhood.ts';
+import { briefBudgetTokens, briefLayout } from './layout.ts';
 
 export const GRAPH_FILE = 'evidence-graph.json';
 export const GRAPH_REVIEW_FILE = 'graph-review.json';
@@ -168,6 +170,10 @@ export function graphBriefParts(graph: EvidenceGraph): BriefParts | undefined {
 
 export function graphBrief(graph: EvidenceGraph, rowCap = 60): string | undefined {
   try {
+    if (briefLayout() === 'neighborhood')
+      return withGraph(graph, (g) =>
+        renderNeighborhood(briefParts(g).sections, { budgetTokens: briefBudgetTokens() }),
+      ).trimEnd();
     const sections = withGraph(graph, (g) => findQuery('brief')!.run(g, []));
     return toToon(sections, { rowCap }).trimEnd();
   } catch {

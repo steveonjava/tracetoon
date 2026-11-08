@@ -133,8 +133,8 @@ existing rendering. Human-only sections must never be filled in by an agent.
 > never cut with `head` or `tail`. Its `avoid` and `limits` rows come first and
 > are instructions, never PR text. `changes` groups the diff into change units;
 > `commitMessages` gives each commit sentence and, in `implementedBy`, the file
-> that carries it: name that file for the behavior, and where `implementedBy`
-> is empty describe the behavior without naming a file. Call code new only if
+> that carries it (and, after `→`, the hunks that do): name that file for the
+> behavior, and where a sentence has neither describe the behavior without naming a file. Call code new only if
 > it is in `newSymbols`. State plainly what the patch shows; attribute only
 > reasons, results and scope remarks the patch can't show to the request or
 > commit message that says them, and never invent a motive. Say what the code
@@ -369,6 +369,7 @@ MSR 2026). The review has three passes:
    to say a check was not run until the session's raw commands confirm it.
    In correction rounds, every new or changed claim about conditional behavior
    (what happens when an option is or isn't given) needs its own `diff:` ref.
+
 3. **Coverage.** List significant behavior the diff changes that the body
    omits or misdescribes, with `diff:` evidence. Use `change-map.json`, when
    present, including its within-file `behaviorChecks`, as a list of what to look

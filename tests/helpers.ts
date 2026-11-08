@@ -4,6 +4,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { git } from '../src/util/exec.ts';
 
+// The existing tests check the TOON brief; neighborhood.test.ts sets its own layout.
+process.env.TRACETOON_BRIEF_LAYOUT ??= 'toon';
+
 const made: string[] = [];
 // Remove each test file's temp folders when it finishes, so repeated runs
 // don't fill the temp filesystem. TRACETOON_KEEP_TMP=1 keeps them for debugging.
