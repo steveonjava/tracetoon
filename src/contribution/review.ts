@@ -99,7 +99,7 @@ const STATES = [
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === 'object' && !Array.isArray(v);
 
-function evidenceExists(
+export function evidenceExists(
   ref: string,
   input: ReviewInput,
   guidance: GuidanceResult,

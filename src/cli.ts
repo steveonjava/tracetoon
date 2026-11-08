@@ -23,6 +23,7 @@ import { sourceCmd } from './commands/source.ts';
 import { queryCmd, ROW_CAP } from './commands/query.ts';
 import { emit, exitCodeOf, UserError } from './commands/output.ts';
 import { publishCmd, renderCmd } from './commands/publish.ts';
+import { reviewImportCmd, reviewPacketCmd } from './commands/review.ts';
 import {
   comicArtCmd,
   comicRerollCmd,
@@ -243,6 +244,27 @@ program
     o.noComic = o.comic === false;
     renderCmd(cwd, { ...g(), ...o });
   });
+
+program
+  .command('review-packet')
+  .description(
+    'write review-packet.md for the lean reviewer: numbered body, brief rows, hunk owners and the diff',
+  )
+  .option('--run <id>', 'run id (default: latest)')
+  .option('--lean', 'the lean packet (the only one)')
+  .action((o) => reviewPacketCmd(cwd, { ...g(), ...o }));
+
+program
+  .command('review')
+  .description('lean reviewer handoffs')
+  .command('import')
+  .description(
+    "turn the lean reviewer's review-findings.json into review.json v2 for the current render",
+  )
+  .option('--run <id>', 'run id (default: latest)')
+  .option('--findings <path>', 'findings file (default: <run>/review-findings.json)')
+  .option('--agent-id <id>', "the reviewer's real host agent id (overrides the file)")
+  .action((o) => reviewImportCmd(cwd, { ...g(), ...o }));
 
 program
   .command('publish')
