@@ -130,8 +130,8 @@ existing rendering. Human-only sections must never be filled in by an agent.
 >
 > Draft from the run's evidence brief (`tracetoon query brief --run <id>`, also
 > printed by `prepare` and at the top of `evidence-notes.md`); read all of it,
-> never cut with `head` or `tail`. Its `avoid` and `limits` rows come first and
-> are instructions, never PR text. `changes` groups the diff into change units;
+> never cut with `head` or `tail`. Its `limits` rows come first and, with the
+> rules in drafting.md, are instructions, never PR text. `changes` groups the diff into change units;
 > `commitMessages` gives each commit sentence and, in `implementedBy`, the file
 > that carries it: name that file for the behavior, and where `implementedBy`
 > is empty describe the behavior without naming a file. Call code new only if
