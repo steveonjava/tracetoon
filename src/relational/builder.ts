@@ -28,6 +28,7 @@ import {
   inheritApprovals,
   relationalLinks,
   RRF_K,
+  SHOW_LINK,
   TOP_K,
   VEC_ALONE,
   type Reason,
@@ -44,8 +45,19 @@ export async function initRelational(): Promise<void> {
 export const LEGEND = [
   'PR evidence from the session logs, commits and diff, retrieved by relevance and packed to fit (not everything is shown).',
   'Cite the id in brackets for what a sentence rests on: S user request, D decision, P plan, commit:<sha> a commit, commit:<sha>#n one sentence of its message, F a changed file, H a diff chunk.',
-  '"→" lists the files or chunks an item is tied to (its edits survive there, or its words match); "why" lists the requests and commit sentences tied to a chunk.',
+  '"→" lists the files or chunks an item is tied to: a request\'s own edits survive there, or text search and embeddings both rank it a strong match (for a commit sentence, within that commit\'s code). "why" lists the requests and commit sentences tied to a chunk. "also in" lines name files with no line of their own.',
 ].join('\n');
+
+/** The legend for small budgets. */
+export const SHORT_LEGEND =
+  'Cite [ids]: S request, D decision, P plan, commit:<sha>(#n) commit (sentence), F file, H diff chunk.';
+
+/** An ambiguous session's fact with no surviving edits needs this relevance… */
+export const AMBIGUOUS_MIN_RELEVANCE = 0.4;
+/** …and at most this many such facts are shown. */
+export const AMBIGUOUS_CAP = 2;
+/** Code lines of behavior chunks that add names or change a value have at least this worth. */
+export const CODE_FLOOR = 9;
 
 const ROLE_WEIGHT: Record<string, number> = {
   behavior: 1.2,
@@ -68,7 +80,8 @@ export function buildRelationalContext(
   opts: BuildOptions,
 ): RelationalContext {
   const t0 = performance.now();
-  const budgetChars = Math.max(400, Math.floor(opts.budgetTokens * 4));
+  // Never more than the budget, however small.
+  const budgetChars = Math.max(0, Math.floor(opts.budgetTokens * 4));
   const loaded = loadStore(inputs);
   const { db, chunks } = loaded;
   try {
@@ -279,12 +292,19 @@ export function buildRelationalContext(
         if (role !== 'generated') {
           const kl = keyLines(c, 2);
           const kl4 = keyLines(c, 6);
+          // Large PRs would otherwise show no code at all: behavior chunks that
+          // add names or change a value (a before ⇒ after pair) get a floor,
+          // decaying across such chunks so a few of them, not all, show code.
+          const telling =
+            role === 'behavior' &&
+            (c.defined.some((d) => fresh.has(d)) || kl.some((l) => l.includes('  ⇒  ')));
           if (kl.length)
             items.push({
               key: `code:${c.id}`,
               section: sectionOf(role),
               order: [Number(f.ord), c.start, c.id, 1],
-              value: cv * 0.45,
+              value: telling ? Math.max(cv * 0.45, CODE_FLOOR) : cv * 0.45,
+              ...(telling ? { group: 'code-floor', decay: 0.6 } : {}),
               parent: `chunk:${c.id}`,
               render: () => kl.map((l) => `      ${l}`).join('\n'),
               expand: () => kl4.map((l) => `      ${l}`).join('\n'),
@@ -293,41 +313,55 @@ export function buildRelationalContext(
       });
     }
 
-    // Every changed file at least by name: one line per directory listing the
-    // files not detailed above (their F ids are citable).
+    // Every changed file is named: per section (tests in Tests) and directory,
+    // one mandatory line lists the files that have no line of their own. Its
+    // full cost is reserved before the greedy pass (it shrinks as files get
+    // their own lines); when the full form would take more than a quarter of
+    // the budget, files are listed compactly as `[F#] name`.
     const dirOf = (p: string) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '.');
-    const dirs = new Map<string, typeof files>();
-    for (const f of files)
-      dirs.set(dirOf(f.path), [...(dirs.get(dirOf(f.path)) ?? []), f]);
-    for (const [dir, list] of dirs) {
-      const render = (chosen: Set<string>) => {
-        const rest = list.filter((f) => !chosen.has(`file:${f.id}`));
-        if (!rest.length) return '';
-        const name = (f: (typeof files)[number]) => {
-          const base = dir === '.' ? f.path : f.path.slice(dir.length + 1);
-          const tag = f.binary ? 'binary' : f.role === 'behavior' ? '' : String(f.role);
-          const st =
-            f.status === 'added' ? 'new' : f.status === 'deleted' ? 'deleted' : '';
-          const meta = [st, tag, f.binary ? '' : `+${f.added}/−${f.removed}`]
-            .filter(Boolean)
-            .join(' ');
-          return `[${f.id}] ${base} (${meta})`;
-        };
-        return `${dir === '.' ? '(root)' : `${dir}/`}: ${rest.map(name).join(', ')}`;
-      };
+    const rollSection = (f: (typeof files)[number]): SectionKey =>
+      f.binary ? 'other' : sectionOf(String(f.role));
+    const groups = new Map<string, typeof files>();
+    for (const f of files) {
+      const g = `${rollSection(f)}|${dirOf(f.path)}`;
+      groups.set(g, [...(groups.get(g) ?? []), f]);
+    }
+    const entry = (f: (typeof files)[number], dir: string, compact: boolean) => {
+      const base = dir === '.' ? f.path : f.path.slice(dir.length + 1);
+      if (compact) return `[${f.id}] ${base}`;
+      const tag = f.binary ? 'binary' : f.role === 'behavior' ? '' : String(f.role);
+      const st = f.status === 'added' ? 'new' : f.status === 'deleted' ? 'deleted' : '';
+      const meta = [st, tag, f.binary ? '' : `+${f.added}/−${f.removed}`]
+        .filter(Boolean)
+        .join(' ');
+      return `[${f.id}] ${base} (${meta})`;
+    };
+    const rollLine = (dir: string, list: typeof files, compact: boolean) =>
+      `${dir === '.' ? 'also in (root)' : `also in ${dir}/`}: ${list.map((f) => entry(f, dir, compact)).join(', ')}`;
+    const fullRoll = [...groups].reduce(
+      (n, [g, list]) => n + rollLine(g.split('|')[1]!, list, false).length + 1,
+      0,
+    );
+    const compactRoll = fullRoll > budgetChars / 4;
+    for (const [g, list] of groups) {
+      const [section, dir] = g.split('|') as [SectionKey, string];
       items.push({
-        key: `dir:${dir}`,
-        section: 'other',
-        order: ['~', dir],
-        value: 2.5 + list.length,
-        render,
+        key: `dir:${g}`,
+        section,
+        order: [Number.MAX_SAFE_INTEGER, dir], // after the files with their own lines
+        value: 1,
+        must: true,
+        render: (chosen) => {
+          const rest = list.filter((f) => !chosen.has(`file:${f.id}`));
+          return rest.length ? rollLine(dir, rest, compactRoll) : '';
+        },
       });
     }
 
     // ---- Requests, decisions, plans ---------------------------------------
     const editBySrc = new Map<string, number>();
     const searchBySrc = new Map<string, number[]>();
-    const chunksBySrc = new Map<string, { id: string; w: number }[]>();
+    const chunksBySrc = new Map<string, { id: string; w: number; strong: boolean }[]>();
     for (const r of rows(
       db,
       `SELECT src, chunk_id, kind, weight FROM link WHERE kind != 'commit'
@@ -340,7 +374,12 @@ export function buildRelationalContext(
         r.kind === 'edit'
           ? Math.min(1, Math.log2(1 + Number(r.weight)) / 4) + 0.5
           : Number(r.weight);
-      chunksBySrc.set(r.src, [...(chunksBySrc.get(r.src) ?? []), { id: r.chunk_id, w }]);
+      // "Strong": an edit link, or a search link where rankers agree strongly.
+      const strong = r.kind === 'edit' || Number(r.weight) >= SHOW_LINK;
+      chunksBySrc.set(r.src, [
+        ...(chunksBySrc.get(r.src) ?? []),
+        { id: r.chunk_id, w, strong },
+      ]);
     }
     // Topical similarity: cosine of a text's embedding with the change's
     // centroid, rescaled (approvals and chatter sit near 0.1, requests about the
@@ -371,17 +410,18 @@ export function buildRelationalContext(
      */
     const relevance = (src: string, text: string) => {
       const e = editBySrc.get(src) ?? 0;
-      const n = (searchBySrc.get(src) ?? []).length;
+      const n = (searchBySrc.get(src) ?? []).filter((w) => w >= SHOW_LINK).length;
       return (
         0.4 * Math.min(1, Math.log2(1 + e) / 8) +
         0.45 * topical(src, text) +
         0.15 * Math.min(1, n / 4)
       );
     };
-    const targetsOf = (src: string) => {
+    /** Chunks an item is tied to, best first; `strongOnly` for requests, decisions, plans. */
+    const targetsOf = (src: string, strongOnly = false) => {
       const agg = new Map<string, number>();
       for (const x of chunksBySrc.get(src) ?? [])
-        agg.set(x.id, (agg.get(x.id) ?? 0) + x.w);
+        if (x.strong || !strongOnly) agg.set(x.id, (agg.get(x.id) ?? 0) + x.w);
       return [...agg]
         .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
         .map(([id]) => id);
@@ -410,7 +450,8 @@ export function buildRelationalContext(
         ORDER BY s.ord, f.seq`,
     );
     // The opening request of each included session: its earliest substantive
-    // request that is at least 40% as tied to the change as its most tied one.
+    // request (8+ words) whose topical similarity is at least 60% of the
+    // session's best.
     const goals = new Set<string>();
     const firstAsk = new Set<string>();
     for (const ref of new Set(facts.map((f) => f.session_ref as string))) {
@@ -459,6 +500,10 @@ export function buildRelationalContext(
         v = (goals.has(id) ? 40 : 2 + 14 * rel) * info + (f.pushback ? 2 : 0);
       else v = (1.5 + 10 * rel) * info + (f.approved ? 1.5 : 0);
       if (e === 0 && rel < 0.15) v *= 0.4;
+      // Ambiguous sessions may not belong to the PR: with no surviving edits a
+      // fact needs relevance 0.4 to be shown, and at most two are shown.
+      const unsure = f.band !== 'included' && e === 0;
+      if (unsure && rel < AMBIGUOUS_MIN_RELEVANCE) continue;
       if (f.band !== 'included') v *= 0.3;
       if (afterHead.has(id)) v *= 0.25;
       const labels = [
@@ -476,7 +521,7 @@ export function buildRelationalContext(
         afterHead.has(id) ? 'after the last commit' : '',
         multiSession && firstAsk.has(id) ? `session ${f.sord}` : '',
       ].filter(Boolean);
-      const targets = targetsOf(id);
+      const targets = targetsOf(id, true);
       // Markdown emphasis and heading marks cost characters and say nothing.
       const plain = text.replace(/^\s*#{1,6}\s+/gm, '').replace(/\*\*|__/g, '');
       const render = (len: number) => (chosen: Set<string>) => {
@@ -490,8 +535,9 @@ export function buildRelationalContext(
         section: 'requests',
         order: [Number(f.sord), Number(f.seq)],
         value: v,
-        group: `session:${f.session_ref}`,
+        group: unsure ? 'ambiguous-unlinked' : `session:${f.session_ref}`,
         decay: 0.9,
+        ...(unsure ? { cap: AMBIGUOUS_CAP } : {}),
         render: render(base),
         expand: render(base * 2.2),
       });
@@ -548,7 +594,8 @@ export function buildRelationalContext(
           section: 'commits',
           order: [Number(k.ord), Number(s.n)],
           value: v,
-          parent: `commit:${k.ref}`,
+          // A commit's first sentence comes before its later ones.
+          parent: Number(s.n) > 1 ? `sent:commit:${k.ref}#1` : `commit:${k.ref}`,
           group: `commit:${k.ref}`,
           decay: 0.85,
           render: render(170),
@@ -624,7 +671,7 @@ export function buildRelationalContext(
       });
     }
 
-    const packed = pack(LEGEND, items, budgetChars);
+    const packed = pack(budgetChars < 2000 ? SHORT_LEGEND : LEGEND, items, budgetChars);
     const text = packed.text;
 
     // ---- Refs: exactly the ids that appear in the text --------------------

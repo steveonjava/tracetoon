@@ -18,7 +18,7 @@
  *   a share of the line, so detail and breadth compete on value per character.
  */
 import type { Chunk } from './diff.ts';
-import { informative } from './diff.ts';
+import { definedName, informative, testTitle } from './diff.ts';
 import { clip, oneLine } from './text.ts';
 
 export type SectionKey = 'requests' | 'commits' | 'changes' | 'tests' | 'other' | 'start';
@@ -64,6 +64,8 @@ export interface Item {
   /** Values decay by `decay` for each item already chosen from the same group. */
   group?: string;
   decay?: number;
+  /** At most this many items of the group are chosen. */
+  cap?: number;
   /** Always included first (legend, start). */
   must?: boolean;
   /** The line(s), given which keys were chosen (for cross-references). */
@@ -80,6 +82,8 @@ export interface Packed {
 
 /** An upgrade to an item's longer version is worth this share of the item. */
 export const EXPAND_GAIN = 0.45;
+/** Characters added to every candidate's cost when ranking by value per character. */
+export const LINE_OVERHEAD = 40;
 /**
  * Requests, decisions and plans worth less than this are left out even when
  * budget remains: weak session evidence (an unrelated aside, an ambiguous
@@ -131,7 +135,9 @@ export function pack(header: string, items: Item[], budgetChars: number): Packed
       let bestCost = 0;
       const consider = (it: Item, upgrade: boolean, v: number, c: number) => {
         if (c <= 0 || used + c > budgetChars) return;
-        const ratio = v / c;
+        // A fixed per-line overhead in the ratio (not the budget) keeps short
+        // fragments from beating the sentence they lean on.
+        const ratio = v / (c + LINE_OVERHEAD);
         if (ratio > bestRatio || (ratio === bestRatio && best && it.key < best.key)) {
           best = it;
           bestUpgrade = upgrade;
@@ -157,6 +163,8 @@ export function pack(header: string, items: Item[], budgetChars: number): Packed
           continue;
         }
         if (it.parent && !chosen.has(it.parent)) continue;
+        if (it.cap !== undefined && it.group && (groupCount.get(it.group) ?? 0) >= it.cap)
+          continue;
         if (it.section === 'requests' && it.value < MIN_VALUE) continue;
         consider(it, false, v, cost(it));
       }
@@ -263,14 +271,19 @@ export function keyLines(c: Chunk, max: number): string[] {
   for (const p of plus) {
     if (paired.has(p)) continue;
     const t = p.text;
+    const comment = /^\s*(\/\/|#|\*|\/\*)/.test(t);
     let score = 0;
-    if (/\b(function|class|interface|type|def|fn|func|const|export)\b/.test(t))
-      score += 1.5;
-    if (/(['"`]).{6,}\1/.test(t)) score += 1;
-    if (/\b(if|else|catch|throw|return|\?\?|\|\|)\b/.test(t)) score += 0.8;
-    if (/\b(test|it|describe)\s*\(/.test(t)) score += 1.5;
-    if (/^\s*(import|from|use|require)\b|^\s*[)}\]];?,?$/.test(t)) score -= 2;
-    if (/^\s*(\/\/|#|\*|\/\*)/.test(t)) score += 0.3;
+    if (definedName(t) !== undefined) score += 2;
+    if (!comment && /(['"`]).{6,}\1/.test(t)) score += 1;
+    if (!comment && /\b(if|else|catch|throw|return)\b|\?\?|\|\|/.test(t)) score += 0.8;
+    if (testTitle(t) !== undefined) score += 1.5;
+    if (
+      /^\s*(import|from|use|require)\b|^\s*['"`]?[\w$-]*['"`]?,?\s*$|^\s*[)}\]];?,?$/.test(
+        t,
+      )
+    )
+      score -= 2;
+    if (comment) score += 0.3;
     if (score > 0) out.push({ at: at(p), text: `+ ${clip(t, 150)}`, score });
   }
   if (!out.length && minus.length)

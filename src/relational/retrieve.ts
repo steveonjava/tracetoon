@@ -12,11 +12,15 @@
  *    - `bm25`: FTS5 over the chunk text (porter stemming, identifiers split);
  *    - `vec`: cosine similarity of potion-code-16M-v2 embeddings, exact kNN;
  *    - `mention`: chunks defining a name, or in a file, the query names.
- *    The lists are fused with reciprocal rank fusion (k = 60) in SQL. A commit's
- *    queries only see that commit's chunks (a foreign-key filter), so a
- *    sentence never borrows code from another commit. A fused hit becomes a
+ *    Each ranker returns its top k, k = min(8, max(2, ceil(N/5))) for N
+ *    candidate chunks, and a hit "agrees" only above a relative bar: BM25 at
+ *    half the query's best score or more, cosine at the query's mean + 1σ or
+ *    more. The lists are fused with reciprocal rank fusion (k = 60) in SQL. A
+ *    commit's queries only see that commit's chunks (a foreign-key filter), so
+ *    a sentence never borrows code from another commit. A fused hit becomes a
  *    `search` link only when two rankers agree, the query names the chunk, or
- *    the embedding alone is close; ranking noise never becomes evidence.
+ *    the embedding alone is close and above its bar; its weight is the
+ *    agreeing rankers' strength, so ranking noise never becomes evidence.
  */
 import { cosine, embeddingModel } from './embed.ts';
 import { insertAll, rows, type Db, type Loaded } from './store.ts';
@@ -31,9 +35,19 @@ import {
 } from './text.ts';
 
 export const RRF_K = 60;
+/** Most hits a ranker returns per query. */
 export const TOP_K = 8;
+/**
+ * Hits per ranker for a query over `n` candidate chunks: with few chunks a
+ * fixed top-8 would make BM25 and vectors agree on almost everything.
+ */
+export const topK = (n: number) => Math.min(TOP_K, Math.max(2, Math.ceil(n / 5)));
+/** A BM25 hit agrees only at half the query's best score or more. */
+export const BM25_BAR = 0.5;
 /** A vector-only hit needs at least this cosine to count as a link. */
 export const VEC_ALONE = 0.55;
+/** A request, decision or plan prints "→" to a search-linked chunk only at this strength. */
+export const SHOW_LINK = 0.6;
 /** Plan paragraphs searched per plan. */
 const PLAN_PARAS = 40;
 
@@ -190,18 +204,21 @@ export function hybridSearch(
     for (const w of new Set(identWords(r.body))) df.set(w, (df.get(w) ?? 0) + 1);
   }
 
+  // Each hit: rank, raw score, whether it clears the ranker's relative bar for
+  // this query ("strong"), and its strength (0..1 relative to the query's best).
   const hits: unknown[][] = [];
+  const candidates = (q: QueryRow) => allowed(q)?.size ?? chunks.length;
   // BM25 (FTS5). A commit's queries filter to its chunks inside SQL.
   const fts = db.prepare(
     `SELECT chunk_id, bm25(chunk_fts) AS s FROM chunk_fts WHERE chunk_fts MATCH ?
-      ORDER BY s, chunk_id LIMIT ${TOP_K}`,
+      ORDER BY s, chunk_id LIMIT ?`,
   );
   const ftsScoped = db.prepare(
     `SELECT chunk_id, bm25(chunk_fts) AS s FROM chunk_fts
       WHERE chunk_fts MATCH ? AND chunk_id IN (
         SELECT l.chunk_id FROM link l JOIN commit_ k ON l.src = 'commit:' || k.ref
          WHERE l.kind = 'commit' AND k.sha = ?)
-      ORDER BY s, chunk_id LIMIT ${TOP_K}`,
+      ORDER BY s, chunk_id LIMIT ?`,
   );
   try {
     queries.forEach((q, i) => {
@@ -210,11 +227,24 @@ export function hybridSearch(
         .sort((a, b) => df.get(a)! - df.get(b)! || a.localeCompare(b));
       const m = ftsOr(words);
       if (!m) return;
+      const k = topK(candidates(q));
       const st = q.scopeSha && scope.has(q.scopeSha) ? ftsScoped : fts;
-      st.bind(st === fts ? [m] : [m, q.scopeSha]);
-      let rank = 0;
-      while (st.step()) hits.push([i + 1, st.get(0), 'bm25', ++rank, -Number(st.get(1))]);
+      st.bind(st === fts ? [m, k] : [m, q.scopeSha, k]);
+      const got: [string, number][] = [];
+      while (st.step()) got.push([st.get(0) as string, -Number(st.get(1))]);
       st.reset();
+      const best = got[0]?.[1] ?? 0;
+      got.forEach(([id, score], r) =>
+        hits.push([
+          i + 1,
+          id,
+          'bm25',
+          r + 1,
+          score,
+          best > 0 && score >= BM25_BAR * best ? 1 : 0,
+          best > 0 ? score / best : 0,
+        ]),
+      );
     });
   } finally {
     fts.finalize();
@@ -234,10 +264,29 @@ export function hybridSearch(
         if (ok && !ok.has(id)) continue;
         scored.push([id, cosine(qv, vectors!.get(id)!)]);
       }
+      if (!scored.length) return;
+      // The bar: one standard deviation above this query's mean similarity.
+      const mean = scored.reduce((a, [, c]) => a + c, 0) / scored.length;
+      const sd = Math.sqrt(
+        scored.reduce((a, [, c]) => a + (c - mean) ** 2, 0) / scored.length,
+      );
       scored.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+      const top = scored[0]![1];
       scored
-        .slice(0, TOP_K)
-        .forEach(([id, s], r) => s > 0 && hits.push([i + 1, id, 'vec', r + 1, s]));
+        .slice(0, topK(scored.length))
+        .forEach(
+          ([id, c], r) =>
+            c > 0 &&
+            hits.push([
+              i + 1,
+              id,
+              'vec',
+              r + 1,
+              c,
+              scored.length > 1 && c >= mean + sd ? 1 : 0,
+              top > mean ? Math.max(0, Math.min(1, (c - mean) / (top - mean))) : 0,
+            ]),
+        );
     });
   }
 
@@ -266,31 +315,37 @@ export function hybridSearch(
         if (path === p || path.endsWith(`/${p}`))
           for (const id of ids) score.set(id, (score.get(id) ?? 0) + 1);
     const ok = allowed(q);
-    [...score]
+    const list = [...score]
       .filter(([id]) => !ok || ok.has(id))
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-      .slice(0, TOP_K)
-      .forEach(([id, s], r) => hits.push([i + 1, id, 'mention', r + 1, s]));
+      .slice(0, topK(candidates(q)));
+    const best = list[0]?.[1] ?? 1;
+    list.forEach(([id, s], r) =>
+      hits.push([i + 1, id, 'mention', r + 1, s, 1, s / best]),
+    );
   });
-  insertAll(db, 'INSERT INTO hit VALUES (?,?,?,?,?)', hits);
+  insertAll(db, 'INSERT INTO hit VALUES (?,?,?,?,?,?,?)', hits);
 
-  // Reciprocal rank fusion and the acceptance rule, in SQL. Weight is the RRF
-  // score scaled so three first-place rankers make 1.0. A source with several
-  // queries (a plan's paragraphs) keeps its best score per chunk.
+  // Fusion and acceptance, in SQL. RRF (k = 60) orders a query's chunks; only
+  // rankers that clear their relative bar count as agreeing, and the link's
+  // weight is their summed strength / 3 (1.0 = all three rankers at the top).
+  // A source with several queries (a plan's paragraphs) keeps its best.
   db.exec(`
     CREATE TABLE fused AS
     SELECT q.id AS query_id, q.source, h.chunk_id,
-           sum(1.0 / (${RRF_K} + h.rank)) * ${(RRF_K + 1) / 3} AS rrf,
-           count(DISTINCT h.ranker) AS rankers,
+           sum(1.0 / (${RRF_K} + h.rank)) AS rrf,
+           count(DISTINCT CASE WHEN h.strong THEN h.ranker END) AS rankers,
+           sum(CASE WHEN h.strong THEN h.strength ELSE 0 END) / 3.0 AS strength,
            max(CASE WHEN h.ranker = 'vec' THEN h.score END) AS cos,
+           max(CASE WHEN h.ranker = 'vec' THEN h.strong ELSE 0 END) AS vec_strong,
            max(h.ranker = 'mention') AS mentioned
       FROM hit h JOIN query q ON q.id = h.query_id
      GROUP BY q.id, h.chunk_id;
 
     INSERT INTO link (src, chunk_id, kind, weight)
-    SELECT source, chunk_id, 'search', max(rrf)
+    SELECT source, chunk_id, 'search', max(strength)
       FROM fused
-     WHERE rankers >= 2 OR mentioned OR cos >= ${VEC_ALONE}
+     WHERE rankers >= 2 OR mentioned OR (cos >= ${VEC_ALONE} AND vec_strong)
      GROUP BY source, chunk_id;
   `);
   const n = (sql: string) => Number(db.selectValue(sql));

@@ -79,7 +79,7 @@ CREATE TABLE query (
 CREATE TABLE hit (
   query_id INTEGER NOT NULL REFERENCES query(id), chunk_id TEXT NOT NULL REFERENCES chunk(id),
   ranker TEXT NOT NULL CHECK (ranker IN ('bm25','vec','mention')), rank INTEGER NOT NULL,
-  score REAL NOT NULL);
+  score REAL NOT NULL, strong INTEGER NOT NULL, strength REAL NOT NULL);
 CREATE TABLE link (
   src TEXT NOT NULL, chunk_id TEXT NOT NULL REFERENCES chunk(id),
   kind TEXT NOT NULL CHECK (kind IN ('edit','commit','search')), weight REAL NOT NULL);
@@ -124,6 +124,10 @@ const wordCount = (t: string) => (t.trim().match(/\S+/g) ?? []).length;
  */
 export const isNoise = (t: string) =>
   /^\s*(<(bash|command|local-command|task-notification|system|user-prompt)[\w-]*>|\[Request interrupted|Caveat:)/i.test(
+    t,
+  ) ||
+  // Claude Code's AskUserQuestion wrapper, sent as a user turn.
+  /^\s*The user (wants to clarify these questions|doesn't want to proceed|has answered your questions)/i.test(
     t,
   );
 

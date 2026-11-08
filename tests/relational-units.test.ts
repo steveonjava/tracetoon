@@ -10,12 +10,14 @@ import { budgetTokens, R_BUDGET_TOKENS } from '../src/relational/index.ts';
 import { buildRelationalContext, initRelational } from '../src/relational/builder.ts';
 import { bertWords, cosine, embeddingModel } from '../src/relational/embed.ts';
 import { chunkFile, definedName, parsePatch, testTitle } from '../src/relational/diff.ts';
-import { loadStore, rows } from '../src/relational/store.ts';
+import { isNoise, loadStore, rows } from '../src/relational/store.ts';
 import {
   buildQueries,
   hybridSearch,
   inheritApprovals,
   relationalLinks,
+  SHOW_LINK,
+  topK,
 } from '../src/relational/retrieve.ts';
 import { keyLines, pack, safe, type Item } from '../src/relational/pack.ts';
 import { commitSentences } from '../src/relational/text.ts';
@@ -467,7 +469,9 @@ describe('store and retrieval', () => {
         [`commit:${SHA_A.slice(0, 12)}#1`],
       )[0]!;
       expect(JSON.parse(greet.defined)).toContain('greet');
-      expect(Number(greet.rankers)).toBe(3);
+      // BM25 and the mention agree strongly (with three candidates the vector
+      // ranker's mean + 1σ bar may not be cleared).
+      expect(Number(greet.rankers)).toBeGreaterThanOrEqual(2);
       // A commit's sentences never retrieve chunks only another commit introduced.
       const leaked = rows(
         db,
@@ -647,5 +651,147 @@ describe('buildRelationalContext', () => {
     expect(performance.now() - t0).toBeLessThan(2000);
     expect(ctx.text.length).toBeLessThanOrEqual(2112 * 4);
     expect(ctx.text).toContain('src/handlers/');
+  });
+});
+
+// ---- Review fixes -------------------------------------------------------------
+
+describe('review fixes', () => {
+  /** The fixture plus many small files: more than a tight budget can detail. */
+  function crowded(): GraphInputs {
+    const inputs = fixture();
+    const parts = [inputs.patch];
+    for (let i = 0; i < 12; i++)
+      parts.push(
+        hunkAdded(`tests/extra/case${i}.test.ts`, [`test('case ${i} works', () => {});`]),
+      );
+    for (let i = 0; i < 8; i++)
+      parts.push(
+        hunkAdded(`docs/guide/page${i}.md`, [`# Page ${i}`, `Text for page ${i}.`]),
+      );
+    for (let i = 0; i < 8; i++)
+      parts.push(
+        hunkAdded(`src/lib/mod${i}.ts`, [
+          `export const value${i} = ${i};`,
+          `// module ${i}`,
+        ]),
+      );
+    inputs.patch = parts.join('\n');
+    return inputs;
+  }
+
+  test('every changed file is named, test files in the Tests section, at any workable budget', () => {
+    const inputs = crowded();
+    const paths = parsePatch(inputs.patch).map((f) => f.path);
+    for (const budget of [500, 900, 2112]) {
+      const ctx = buildRelationalContext(inputs, { budgetTokens: budget });
+      expect(ctx.text.length).toBeLessThanOrEqual(budget * 4);
+      const ids = new Set(ctx.refs.map((r) => r.id));
+      paths.forEach((p, i) => {
+        expect(ids.has(`F${i + 1}`)).toBe(true);
+        expect(ctx.text).toContain(p.split('/').pop()!);
+      });
+      const tests = ctx.text.split('## Tests added or changed\n')[1]!.split('\n## ')[0]!;
+      for (let i = 0; i < 12; i++) expect(tests).toContain(`case${i}.test.ts`);
+      const other = ctx.text.split('## Other changed files\n')[1] ?? '';
+      expect(other).not.toContain('.test.ts');
+    }
+  });
+
+  test('never exceeds tiny budgets', () => {
+    for (const budget of [0, 10, 25, 60, 99]) {
+      const ctx = buildRelationalContext(crowded(), { budgetTokens: budget });
+      expect(ctx.text.length).toBeLessThanOrEqual(budget * 4);
+      expect(ctx.tokens).toBeLessThanOrEqual(budget);
+    }
+  });
+
+  test("Claude Code's AskUserQuestion wrapper is not a request", () => {
+    expect(
+      isNoise('The user wants to clarify these questions.\n    This means they may have'),
+    ).toBe(true);
+    expect(isNoise('<bash-stdout>ok</bash-stdout>')).toBe(true);
+    expect(isNoise('The user interface needs a dark mode')).toBe(false);
+  });
+
+  test('k depends on the number of candidate chunks', () => {
+    expect([1, 3, 10, 20, 40, 400].map(topK)).toEqual([2, 2, 2, 4, 8, 8]);
+  });
+
+  test("a BM25 hit agrees only at half its query's best score; link weights are 0..1", () => {
+    const loaded = loadStore(fixture());
+    const { db } = loaded;
+    try {
+      relationalLinks(db);
+      hybridSearch(loaded, buildQueries(db));
+      const bad = rows(
+        db,
+        `SELECT h.query_id FROM hit h
+          WHERE h.ranker = 'bm25' AND h.strong = 1
+            AND h.score < 0.5 * (SELECT max(score) FROM hit x
+                                  WHERE x.query_id = h.query_id AND x.ranker = 'bm25')`,
+      );
+      expect(bad).toEqual([]);
+      const w = rows(
+        db,
+        `SELECT min(weight) lo, max(weight) hi FROM link WHERE kind = 'search'`,
+      )[0]!;
+      expect(Number(w.lo)).toBeGreaterThanOrEqual(0);
+      expect(Number(w.hi)).toBeLessThanOrEqual(1);
+    } finally {
+      db.close();
+    }
+  });
+
+  test('requests print → only from edit links or strong search links', () => {
+    const inputs = fixture();
+    const loaded = loadStore(inputs);
+    const allowed = new Map<string, Set<string>>();
+    try {
+      relationalLinks(loaded.db);
+      inheritApprovals(loaded.db);
+      hybridSearch(loaded, buildQueries(loaded.db));
+      for (const r of rows(
+        loaded.db,
+        `SELECT l.src, l.chunk_id, c.file_id FROM link l JOIN chunk c ON c.id = l.chunk_id
+          WHERE l.kind = 'edit' OR (l.kind = 'search' AND l.weight >= ?)`,
+        [SHOW_LINK],
+      )) {
+        const set = allowed.get(r.src) ?? new Set<string>();
+        set.add(r.chunk_id).add(r.file_id);
+        allowed.set(r.src, set);
+      }
+    } finally {
+      loaded.db.close();
+    }
+    const ctx = buildRelationalContext(inputs, { budgetTokens: 2112 });
+    for (const line of ctx.text.split('\n')) {
+      const m = /^\[([SDP]\d+)\].* → ((?:[HF]\d+ ?)+)$/.exec(line);
+      if (!m) continue;
+      for (const t of m[2]!.trim().split(' '))
+        expect(allowed.get(m[1]!)?.has(t)).toBe(true);
+    }
+  });
+
+  test("a commit's later sentences appear only with its first", () => {
+    for (const budget of [150, 250, 400, 2112]) {
+      const text = buildRelationalContext(fixture(), { budgetTokens: budget }).text;
+      for (const m of text.matchAll(/\[(commit:[0-9a-f]{12})#(\d+)\]/g))
+        if (m[2] !== '1') expect(text).toContain(`[${m[1]}#1]`);
+    }
+  });
+
+  test('a group cap limits how many of its items are chosen', () => {
+    const items: Item[] = [1, 2, 3, 4].map((i) => ({
+      key: `a${i}`,
+      section: 'requests',
+      order: [i],
+      value: 10,
+      group: 'ambiguous-unlinked',
+      cap: 2,
+      render: () => `line ${i}`,
+    }));
+    const p = pack('H', items, 1000);
+    expect([...p.chosen].filter((k) => k.startsWith('a'))).toHaveLength(2);
   });
 });

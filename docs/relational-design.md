@@ -36,27 +36,29 @@ GraphInputs ─ETL→ SQLite record tables ─SQL joins→ exact links ┐
 
 ## Schema
 
-| table                        | key                     | foreign keys / join keys                                                   | what it holds                                                                                                       |
-| ---------------------------- | ----------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `session`                    | `ref`                   |                                                                            | agent, band (included / ambiguous), span                                                                            |
-| `fact`                       | `id` (S#, D#, P#)       | `session_ref` → session; `turn_id` → fact (the prompt whose turn it is in) | requests, decisions (question → answer), plans; word count, `noise` flag (pasted tool output, interruption markers) |
-| `run`                        | `id` (R#, V#)           | `session_ref`, `turn_id`                                                   | runs and receipts (kept in the store; not shown, see below)                                                         |
-| `edit`                       | `id`                    | `session_ref`; `turn_id`, `step_id` → fact; `file`                         | one captured edit, in trail order                                                                                   |
-| `edit_line`                  |                         | `edit_id` → edit; `norm`                                                   | normalized added lines that also survive in the PR                                                                  |
-| `file`                       | `id` (F#)               | `path` (unique)                                                            | status (new, deleted, renamed, modified), binary, role (behavior, tests, docs, config, generated), +/−              |
-| `chunk`                      | `id` (H#)               | `file_id` → file                                                           | new-file line range, enclosing scope, names defined and removed, test titles, search body                           |
-| `chunk_line`                 |                         | `chunk_id` → chunk; `norm`                                                 | every changed line with sign, line number and normalized text                                                       |
-| `symbol`                     |                         | `chunk_id`; `name`                                                         | names defined, removed, or test titles                                                                              |
-| `ident`                      |                         | `chunk_id`; `name`                                                         | identifiers used on added lines (for "test uses X" and centrality joins)                                            |
-| `commit_`                    | `sha`                   | `ref` (12 chars, unique)                                                   | subject, body, time                                                                                                 |
-| `commit_sentence`            | `id` (`commit:<sha>#n`) | `sha` → commit_                                                            | each body sentence or bullet; `result` flag for sentences that report results                                       |
-| `commit_file`, `commit_line` |                         | `sha` → commit_; `path`, `norm`                                            | the commit's touched files and its own added and removed lines                                                      |
-| `chunk_fts`                  |                         | `chunk_id`                                                                 | FTS5 (porter, unicode61) over the chunk body, identifiers split into words                                          |
-| `query`, `hit`               |                         | `query_id` → query; `chunk_id` → chunk                                     | every query and every ranker hit (rank, raw score)                                                                  |
-| `fused`                      |                         |                                                                            | RRF per (query, chunk): score, number of rankers that agree, cosine, whether the chunk was named                    |
-| `link`                       |                         | `chunk_id` → chunk; `src` (a fact, commit or sentence id)                  | the evidence: `edit`, `commit`, `search`, with weights                                                              |
+| table                        | key                     | foreign keys / join keys                                                   | what it holds                                                                                                                                              |
+| ---------------------------- | ----------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `session`                    | `ref`                   |                                                                            | agent, band (included / ambiguous), span                                                                                                                   |
+| `fact`                       | `id` (S#, D#, P#)       | `session_ref` → session; `turn_id` → fact (the prompt whose turn it is in) | requests, decisions (question → answer), plans; word count, `noise` flag (pasted tool output, interruption markers, Claude Code's AskUserQuestion wrapper) |
+| `run`                        | `id` (R#, V#)           | `session_ref`, `turn_id`                                                   | runs and receipts (kept in the store; not shown, see below)                                                                                                |
+| `edit`                       | `id`                    | `session_ref`; `turn_id`, `step_id` → fact; `file`                         | one captured edit, in trail order                                                                                                                          |
+| `edit_line`                  |                         | `edit_id` → edit; `norm`                                                   | normalized added lines that also survive in the PR                                                                                                         |
+| `file`                       | `id` (F#)               | `path` (unique)                                                            | status (new, deleted, renamed, modified), binary, role (behavior, tests, docs, config, generated), +/−                                                     |
+| `chunk`                      | `id` (H#)               | `file_id` → file                                                           | new-file line range, enclosing scope, names defined and removed, test titles, search body                                                                  |
+| `chunk_line`                 |                         | `chunk_id` → chunk; `norm`                                                 | every changed line with sign, line number and normalized text                                                                                              |
+| `symbol`                     |                         | `chunk_id`; `name`                                                         | names defined, removed, or test titles                                                                                                                     |
+| `ident`                      |                         | `chunk_id`; `name`                                                         | identifiers used on added lines (for "test uses X" and centrality joins)                                                                                   |
+| `commit_`                    | `sha`                   | `ref` (12 chars, unique)                                                   | subject, body, time                                                                                                                                        |
+| `commit_sentence`            | `id` (`commit:<sha>#n`) | `sha` → commit_                                                            | each body sentence or bullet; `result` flag for sentences that report results                                                                              |
+| `commit_file`, `commit_line` |                         | `sha` → commit_; `path`, `norm`                                            | the commit's touched files and its own added and removed lines                                                                                             |
+| `chunk_fts`                  |                         | `chunk_id`                                                                 | FTS5 (porter, unicode61) over the chunk body, identifiers split into words                                                                                 |
+| `query`, `hit`               |                         | `query_id` → query; `chunk_id` → chunk                                     | every query and every ranker hit (rank, raw score, `strong`: clears the ranker's relative bar, `strength` 0..1)                                            |
+| `fused`                      |                         |                                                                            | per (query, chunk): RRF score, number of rankers that agree strongly, summed strength, cosine, whether it was named                                        |
+| `link`                       |                         | `chunk_id` → chunk; `src` (a fact, commit or sentence id)                  | the evidence: `edit`, `commit`, `search`, with weights                                                                                                     |
 
 Commit-sentence numbering uses the same splitting rule that `render` checks sentence coverage against, so `commit:<sha>#n` means the same sentence on both sides.
+
+**Disclosure: copied code.** `commitSentences` and `RESULT_CLAIM` in `src/relational/text.ts` are copied from `src/graph/build.ts`; they are not imported, because nothing under `src/graph/` may be imported. They are copied rather than rewritten because the numbering has to match: `render` checks the writer's `commit:<sha>#n` tags and commit-sentence coverage against the graph's numbering, so a different split would point `#3` at a different sentence. Everything else in `src/relational/` is written for this arm, including the diff parser and the definition and test-title readers.
 
 ## Diff parsing and chunking
 
@@ -101,7 +103,7 @@ A name is **new** when it is defined on an added line and on no removed line any
 
 Noise prompts and prompts under three words are skipped.
 
-**Rankers** (top 8 each):
+**Rankers.** Each returns its top k for a query over N candidate chunks, with k = min(8, max(2, ⌈N/5⌉)). With few chunks, a fixed top 8 would make BM25 and the vectors "agree" on almost every chunk.
 
 - **BM25**: FTS5 `MATCH` over the query's rarest content words, quoted and OR-ed, with `bm25()` ordering. The FTS body indexes code identifiers both whole and split (`survivalLinks` → `survival links`), with porter stemming.
 - **Vector**: exact cosine kNN over unit vectors in TypeScript. A PR has a few hundred chunks, so a brute-force scan (about 1 ms per 1,000 chunk-query pairs) is exact and needs no ANN index.
@@ -109,15 +111,23 @@ Noise prompts and prompts under three words are skipped.
 
 **Scoping.** A commit's subject and sentences only see the chunks that commit introduced, so "a sentence speaks for its own commit only" holds in retrieval as well as in the rules. For BM25 the filter is a subquery inside the `MATCH` statement; for the other two rankers it is a set filter.
 
-**Fusion.** Reciprocal rank fusion with k = 60 runs in SQL (`sum(1/(60+rank))` grouped by query and chunk). The score is scaled so that three first-place rankers give 1.0.
+**Agreement is relative.** A hit counts as agreeing only above its ranker's bar for that query:
+
+- BM25: at least half of the query's best score;
+- vector: cosine at least the query's mean over its candidates + 1σ;
+- mention: always (naming code is exact).
+
+**Fusion.** Reciprocal rank fusion with k = 60 runs in SQL (`sum(1/(60+rank))` grouped by query and chunk) and orders a query's chunks. The link weight is the agreeing rankers' summed strength divided by 3, where strength is the score relative to the query's best (for vectors, relative to the mean). A weight of 1.0 means all three rankers put the chunk at the top. Raw RRF was not used as the weight because it saturates: two rankers anywhere near the top give about the same score.
 
 **Acceptance rule.** A fused hit becomes a `search` link only if one of these holds:
 
-- two rankers agree;
+- two rankers agree strongly;
 - the query names the chunk;
-- the cosine alone is at least 0.55.
+- the cosine alone is at least 0.55 and clears its bar.
 
 RRF always ranks something first, and an unconditioned top-k would turn noise into "evidence".
+
+**What `→` means.** A request, decision or plan prints `→` only to chunks it has an edit link to, or a search link with weight at least 0.6 (two rankers near their top, or all three agreeing). A commit sentence prints its strongest links within its own commit's code.
 
 **Reranking.** No cross-encoder can run here (offline, under 2 s, in three runtimes), so reranking works from relational priors:
 
@@ -129,7 +139,7 @@ RRF always ranks something first, and an unconditioned top-k would turn noise in
 
 - 40%: surviving edit lines, log-scaled;
 - 45%: topical similarity, the cosine of the fact's embedding with the change's centroid (chunk vectors weighted by size and file role);
-- 15%: the number of search links.
+- 15%: the number of strong search links (weight 0.6 or more).
 
 Topical similarity separates real asks from chatter: about 0.05–0.15 for "yes", "done" or "how is the test going", 0.33–0.5 for requests about the change, and 0.4–0.7 for plans. RRF scores could not do this, because they saturate (nearly every fact scored about 0.63).
 
@@ -161,13 +171,17 @@ There are about 700 candidate lines for a large PR. Each has:
 
 - a section, a layout order and a value;
 - an optional parent (a chunk needs its file line; code lines need their chunk; a commit sentence needs its commit);
-- a group with a decay (each further chunk of one file is worth ×0.6; each further sentence of one commit ×0.85; each further request of one session ×0.9);
+- a group with a decay (each further chunk of one file is worth ×0.6; each further sentence of one commit ×0.85; each further request of one session ×0.9), and optionally a cap on how many of the group are chosen;
 - an optional longer version.
 
-The greedy picks the candidate with the highest marginal value per character. Marginal value applies the group decay and a gentle per-section decay (0.95–0.985 per line already chosen), so no single kind of evidence, typically code detail, takes the whole budget. This is the standard greedy for a submodular objective under a knapsack constraint.
+The greedy picks the candidate with the highest marginal value per character. Each line's cost carries a fixed 40-character overhead in this ratio only (not in the budget), so short fragments don't win just for being short. A commit's later sentences also need its sentence #1 first: "It now applies to whoever drafts." never appears without the sentence it leans on. Marginal value applies the group decay and a gentle per-section decay (0.95–0.985 per line already chosen), so no single kind of evidence, typically code detail, takes the whole budget. This is the standard greedy for a submodular objective under a knapsack constraint.
 
 - **Upgrades compete.** Upgrading a line to its longer version is a candidate worth 45% of the line's value. For a small PR the budget therefore goes to full commit sentences, longer request text and more before ⇒ after code lines, instead of to marginal facts.
 - **Value floor.** Requests, decisions and plans worth less than 1.5 are left out even when room remains: an ambiguous session's aside costs the writer more than empty space does. Diff and commit lines have no floor.
+- **Ambiguous sessions.** A fact from an ambiguous session with no surviving edits needs relevance 0.4 or more to be shown, and at most two such facts are shown.
+- **Mandatory file roll-up.** Every changed file is named. For each section and directory, one mandatory `also in <dir>/:` line lists the files that have no line of their own. Test files go in the Tests section, behavior files under What changed, and the rest under Other. The roll-up's full cost is reserved before the greedy pass. It shrinks as files get their own lines, and the per-round re-measure gives the freed space back. If the full form (`[F#] name (new +12/−0)`) would take more than a quarter of the budget, files are listed compactly as `[F#] name`.
+- **A floor for code.** On large PRs, file and chunk lines would otherwise win every time, and no code line would appear. Code lines of behavior chunks that add names or change a value (a before ⇒ after pair) are worth at least 9, decaying ×0.6 across such chunks, so a few of them show code.
+- **Small budgets.** The text never exceeds `budgetTokens × 4` characters. Below 2,000 characters a one-line legend replaces the full one, and a last resort cuts the text to the budget.
 - **Exact fit.** Cross-references (`→ H3`, `why S2`) are resolved after selection. They name a chunk only if it is shown, else its file, so every id in the text is something the writer can read. The text is re-measured after each round; a final pass drops the least valuable leaves if anything still overflows, which in practice doesn't happen.
 - **Values, roughly:**
   - opening request: 40 (it is why the PR exists);
@@ -178,7 +192,14 @@ The greedy picks the candidate with the highest marginal value per character. Ma
   - chunk line: by role, size, new names, tests and linked reasons;
   - code lines: 45% of their chunk.
 
-  These were tuned on this repository's own history (its own PRs, single commits and the large evidence-graph branch), never on evaluation cases.
+  These were tuned by reading outputs on this repository's own history, never on evaluation cases. The exact ranges (base..head):
+
+  - `9ac29c4918ab485fb8132cac2464a05df134d2f2..c1231603e913032bbc30c71b0da4aeb468a81a98` (main..c123160, 16 commits);
+  - `dd66a07adccbbd6a45197b08a66a46ccb489f5f3..c1231603e913032bbc30c71b0da4aeb468a81a98` (single commit);
+  - `af126ac4a9c9d6dfa4cee0180793a1968b8fb203..e3bc491aaf0a25926801b1a853877def2c55516f` (single commit);
+  - `9ac29c4918ab485fb8132cac2464a05df134d2f2..885332867eee8c0211d9639c482f8220e1319bbe` (single large commit).
+
+  Two more single commits (`e3bc491a..d94bd82e`, `ca6ac22d..ed752a90`) were extracted but their outputs were never read.
 
 ### What is left out
 
@@ -205,25 +226,34 @@ legend: what each id kind is, what → and "why" mean
   [H3] L1-4 tests "…"; uses greet (H1); why S1
 ## Other changed files
 [F4] README.md (docs, +2/−0): "…"
-src/graph/vendor/: [F33] README.md (new generated +12/−0), …
+also in src/graph/vendor/: [F33] README.md (new generated +12/−0), …
 ## Where a reviewer could start
 [F5] src/x.ts (defines A, B used by 4 other changed files); then [F2] …
 ```
 
-- Every changed file is named at least once. Files without their own line are listed compactly per directory, with citable F ids, so the writer can give every area a clause.
+- Every changed file is named at least once, with a citable F id: either on its own line or in its section's mandatory `also in` roll-up. A unit test checks this for every file at several budgets. On main..c123160 all 48 changed files are named; before the roll-up was made mandatory, 22 were missing.
 - Content never forges a tag: anything in user text or code that looks like `[H1]` or `[commit:…]` is shown as `(H1)`.
 - Refs are found by scanning the final text for known ids. Each ref carries the item's full text (a request up to 1,500 characters; a chunk's path, range, names and up to 60 changed lines), so `render`'s check that a tagged sentence names only code its refs mention has the names to compare against.
 
 ## Measured
 
-| case                                             | diff lines | chunks | queries | relational build                                    |
-| ------------------------------------------------ | ---------- | ------ | ------- | --------------------------------------------------- |
-| fixture (unit test, 1,000 synthetic lines)       | ~1,030     | ~230   |         | < 2 s asserted (about 150 ms)                       |
-| this repository, one commit (`c123160`)          | 160        | 12     | 77      | about 0.18 s                                        |
-| this repository, one large commit (`8853328`)    | 4,300      | 177    | 50      | about 0.3 s                                         |
-| this repository, 16-commit evidence-graph branch | 7,900      | 274    | 202     | about 0.55 s standalone, 0.87 s in a full `prepare` |
+| case                                             | diff lines | chunks | queries | relational build              |
+| ------------------------------------------------ | ---------- | ------ | ------- | ----------------------------- |
+| fixture (unit test, 1,000 synthetic lines)       | ~1,030     | ~230   |         | < 2 s asserted (about 150 ms) |
+| this repository, one commit (`c123160`)          | 160        | 12     | 77      | about 0.16 s                  |
+| this repository, one large commit (`8853328`)    | 4,300      | 177    | 50      | about 0.3 s                   |
+| this repository, 16-commit evidence-graph branch | 7,900      | 274    | 202     | about 0.57 s standalone       |
 
-For the last row, the 0.55 s is about 0.45 s of retrieval and 0.1 s of packing.
+For the last row, about 0.45 s is retrieval and the rest is packing.
+
+Coverage on main..c123160, before and after the review fixes:
+
+|                            | before         | after          |
+| -------------------------- | -------------- | -------------- |
+| changed files named        | 26 of 48       | 48 of 48       |
+| Tests section              | 176 characters | 436 characters |
+| commits' share of the text | 41%            | 30%            |
+| code lines                 | 0              | 2              |
 
 ## With more time
 
