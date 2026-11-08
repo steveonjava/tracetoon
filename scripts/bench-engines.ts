@@ -316,6 +316,9 @@ const out = resolve(opt('--out') ?? 'bench-out');
 const timeoutS = Number(opt('--timeout') ?? 120);
 const workloads = (opt('--workloads') ?? 'pr,hop').split(',');
 const only = opt('--queries')?.split(',');
+const engines = (opt('--engines') ?? 'graph,graph-noclock,sqlite').split(',') as (
+  'graph' | 'graph-noclock' | 'sqlite'
+)[];
 const files: string[] = [];
 const walk = (p: string) => {
   if (statSync(p).isDirectory()) for (const f of readdirSync(p)) walk(join(p, f));
@@ -330,9 +333,6 @@ const queries = [
   ...(workloads.includes('hop') ? HOPS.map((h) => h.id) : []),
 ].filter((q) => !only || only.includes(q));
 const synthetic = (f: string) => /synthetic-n\d+/.test(f);
-const engines = (opt('--engines') ?? 'graph,graph-noclock,sqlite').split(',') as (
-  'graph' | 'graph-noclock' | 'sqlite'
-)[];
 for (const f of files)
   for (const q of queries) {
     // The PR workload is per PR: run it on real graphs only.
