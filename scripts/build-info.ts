@@ -4,11 +4,13 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { prepareDependencies } from './dependencies.ts';
 import { verifyCypherlite } from './cypherlite.ts';
+import { verifyEmbeddingModel } from './embedding-model.ts';
 
 const root = resolve(import.meta.dir, '..');
 export function buildManifest(check = false, stamp = true) {
   const dependencies = [prepareDependencies()];
   verifyCypherlite(); // the vendored graph engine must match its pin
+  verifyEmbeddingModel(); // so must the relational arm's embedding model
   const recipe = JSON.parse(readFileSync(join(root, 'build.config.json'), 'utf8'));
   if (recipe.schema !== 'tracetoon.build-recipe/v1' || recipe.bunVersion !== Bun.version)
     throw new Error(`Builds require Bun ${recipe.bunVersion}; found ${Bun.version}.`);

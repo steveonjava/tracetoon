@@ -50,7 +50,7 @@ export interface BuildOptions {
  * The fixed token budget, set from the median size of the graph arm's brief on
  * the 7 cases (preregistration). TRACETOON_R_BUDGET overrides it for experiments.
  */
-export const R_BUDGET_TOKENS = 4000;
+export const R_BUDGET_TOKENS = 2112;
 export const budgetTokens = () =>
   Number(process.env.TRACETOON_R_BUDGET) || R_BUDGET_TOKENS;
 
