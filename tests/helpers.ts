@@ -3,6 +3,10 @@ import { afterAll } from 'bun:test';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { git } from '../src/util/exec.ts';
+import { initSqlWasm } from '../src/sql/engine.ts';
+
+// The SQLite evidence store's wasm driver loads once per test process.
+await initSqlWasm();
 
 const made: string[] = [];
 // Remove each test file's temp folders when it finishes, so repeated runs

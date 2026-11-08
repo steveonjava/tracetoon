@@ -21,6 +21,7 @@ import {
 } from './commands/digest.ts';
 import { sourceCmd } from './commands/source.ts';
 import { queryCmd, ROW_CAP } from './commands/query.ts';
+import { initSqlWasm } from './sql/engine.ts';
 import { emit, exitCodeOf, UserError } from './commands/output.ts';
 import { publishCmd, renderCmd } from './commands/publish.ts';
 import {
@@ -63,7 +64,20 @@ const program = new Command()
 
 const g = () => program.opts<{ json?: boolean }>();
 let timedAction: { name: string; run?: string; started: number } | undefined;
-program.hook('preAction', (_command, action) => {
+// Commands that never read the evidence store skip loading SQLite's wasm (~20 ms).
+const NO_EVIDENCE = new Set([
+  'art',
+  'reroll',
+  'prompts',
+  'install',
+  'uninstall',
+  'comic',
+]);
+program.hook('preAction', async (_command, action) => {
+  if (!NO_EVIDENCE.has(action.name()))
+    await initSqlWasm().catch(() => {
+      /* fail open: evidence commands report the store unavailable */
+    });
   if (
     action.opts().run &&
     ['render', 'publish', 'art', 'reroll', 'prompts'].includes(action.name())

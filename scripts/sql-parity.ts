@@ -5,6 +5,9 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import type { EvidenceGraph } from '../src/graph/model.ts';
 import { compareEngines } from '../src/sql/parity.ts';
+import { initSqlWasm } from '../src/sql/engine.ts';
+
+await initSqlWasm();
 
 const verbose = process.argv.includes('--verbose');
 const files: string[] = [];

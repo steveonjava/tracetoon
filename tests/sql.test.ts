@@ -89,7 +89,14 @@ const R = (type: any, from: [any, string], to: [any, string], props?: any) => ({
 
 describe('sqlite evidence store', () => {
   test('SQLite opens in this runtime, with FTS5', () => {
-    expect(sqlEngineAvailable()).toMatchObject({ ok: true });
+    // The wasm driver is the default (WebAssembly vs WebAssembly against cypherlite).
+    expect(sqlEngineAvailable()).toMatchObject({
+      ok: true,
+      driver:
+        process.env.TRACETOON_SQLITE_DRIVER === 'native'
+          ? expect.any(String)
+          : 'sqlite-wasm',
+    });
   });
 
   test('typed tables decode lists and booleans; writes are refused', () => {
