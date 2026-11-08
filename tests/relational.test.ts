@@ -5,9 +5,12 @@ import { join, resolve } from 'node:path';
 import { git } from '../src/util/exec.ts';
 import { ClaudeLog, makeRepo, tempDir } from './helpers.ts';
 
-const CLI = process.env.TRACETOON_TEST_CLI ?? resolve(import.meta.dir, '../src/cli.ts');
+// Paths given relative to where the test runs (the CLI itself runs in a temp repo).
+const CLI = process.env.TRACETOON_TEST_CLI
+  ? resolve(process.env.TRACETOON_TEST_CLI)
+  : resolve(import.meta.dir, '../src/cli.ts');
 const PROGRAM = process.env.TRACETOON_TEST_BINARY
-  ? [process.env.TRACETOON_TEST_BINARY]
+  ? [resolve(process.env.TRACETOON_TEST_BINARY)]
   : [process.execPath, CLI];
 setDefaultTimeout(60_000);
 
@@ -70,9 +73,33 @@ describe('shape test: relational/vector arm interface', () => {
     // The digest is not annotated from the graph.
     const digest = JSON.parse(readFileSync(prepared.json.digestPath, 'utf8'));
     expect(digest.files.every((f: any) => !f.facts)).toBe(true);
-    const refs = JSON.parse(
+    const context = JSON.parse(
       readFileSync(join(runDir, 'relational-context.json'), 'utf8'),
-    ).refs;
+    );
+    const refs = context.refs;
+    // The builder ran with SQLite and the bundled embedding model in this runtime.
+    expect(context.stats.retrieval.model).toBe('minishlab/potion-code-16M-v2');
+    expect(context.stats.retrieval.vectors).toBe(true);
+    expect(context.tokens).toBeLessThanOrEqual(2112);
+    expect(context.text.length).toBeLessThanOrEqual(2112 * 4);
+    // Every id in the text is a ref with its own text, and only those.
+    const ids = [
+      ...new Set(
+        [
+          ...context.text.matchAll(
+            /(?<![\w:])(commit:[0-9a-f]{12}(?:#\d+)?|[SDPRVFH]\d+)(?![\w#])/g,
+          ),
+        ].map((m: RegExpMatchArray) => m[1]),
+      ),
+    ].sort();
+    expect(refs.map((r: { id: string }) => r.id).sort()).toEqual(ids);
+    expect(ids).toContain('S1');
+    expect(ids.some((id) => /^commit:[0-9a-f]{12}#1$/.test(id as string))).toBe(true);
+    expect(ids.some((id) => /^H\d+$/.test(id as string))).toBe(true);
+    // The brief is the context plus the rules; it names the parts of the change.
+    expect(prepared.json.brief).toContain('## What changed, by file');
+    expect(prepared.json.brief).toContain('src/greet.ts');
+    expect(prepared.json.brief).toContain('Add a greet helper that says hello by name');
     writeFileSync(join(runDir, 'title.txt'), 'Add a greet helper');
     writeFileSync(
       join(runDir, 'body.md'),

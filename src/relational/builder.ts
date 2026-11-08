@@ -477,9 +477,11 @@ export function buildRelationalContext(
         multiSession && firstAsk.has(id) ? `session ${f.sord}` : '',
       ].filter(Boolean);
       const targets = targetsOf(id);
+      // Markdown emphasis and heading marks cost characters and say nothing.
+      const plain = text.replace(/^\s*#{1,6}\s+/gm, '').replace(/\*\*|__/g, '');
       const render = (len: number) => (chosen: Set<string>) => {
         const to = refsTo(targets, chosen, 3);
-        const body = safe(bestSentences(text, centroid, len));
+        const body = safe(bestSentences(plain, centroid, len));
         return `[${id}]${labels.length ? ` (${labels.join('; ')})` : ''} ${body}${to.length ? ` → ${to.join(' ')}` : ''}`;
       };
       const base = f.kind === 'prompt' ? (goals.has(id) ? 360 : 200) : 180;

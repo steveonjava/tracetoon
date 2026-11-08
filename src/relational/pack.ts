@@ -81,9 +81,10 @@ export interface Packed {
 /** An upgrade to an item's longer version is worth this share of the item. */
 export const EXPAND_GAIN = 0.45;
 /**
- * Lines worth less than this are left out even when budget remains: weak
- * evidence (an unrelated aside from an ambiguous session) costs the writer
- * more than the empty space does.
+ * Requests, decisions and plans worth less than this are left out even when
+ * budget remains: weak session evidence (an unrelated aside, an ambiguous
+ * session's chatter) costs the writer more than the empty space does. Diff
+ * and commit lines have no floor: they are the change itself.
  */
 export const MIN_VALUE = 1.5;
 
@@ -156,7 +157,7 @@ export function pack(header: string, items: Item[], budgetChars: number): Packed
           continue;
         }
         if (it.parent && !chosen.has(it.parent)) continue;
-        if (it.value < MIN_VALUE) continue;
+        if (it.section === 'requests' && it.value < MIN_VALUE) continue;
         consider(it, false, v, cost(it));
       }
       if (!best) break;
