@@ -283,11 +283,18 @@ describe('evidence graph', () => {
     const { repo, cli } = scenario();
     const prepared = cli(repo.root, '--json', 'prepare', '--offline');
     const run = prepared.json.run;
-    // With a brief, the default is the full path; the quick path is opt-in.
-    // With a brief, the default is the reviewed path: inline draft, one full reviewer.
+    // With a brief, the default is the reviewed path: inline draft from
+    // drafting.md, one fresh reviewer on the lean packet; quick path is opt-in.
     expect(prepared.json.next).toContain('reviewed brief path');
+    expect(prepared.json.next).toContain('references/drafting.md');
+    expect(prepared.json.next).toContain(`tracetoon review-packet --lean --run ${run}`);
     expect(prepared.json.next).toContain('one fresh independent reviewer');
+    expect(prepared.json.next).toContain('references/reviewer-lean.md');
+    expect(prepared.json.next).toContain('review-findings.json');
+    expect(prepared.json.next).toContain(`tracetoon review import --run ${run}`);
+    expect(prepared.json.next).toContain('same reviewer');
     expect(prepared.json.next).toContain('quick path');
+    expect(prepared.json.next).not.toContain('contribution-workflow.md');
     expect(prepared.json.brief).not.toContain('branching or fallback line');
     const b = cli(repo.root, '--json', 'query', 'brief', '--run', run);
     const changes = b.json.sections.find((x: any) => x.title === 'changes').rows;

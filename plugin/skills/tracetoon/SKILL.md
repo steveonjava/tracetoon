@@ -8,7 +8,8 @@ description: Create a GitHub PR with a description and optional comic written fr
 Tracetoon reads the session logs your agents already keep on disk, finds the
 sessions that produced the current branch, and gives you a redacted digest and
 an evidence brief. With a brief, you draft the description yourself from it
-and one fresh independent reviewer checks it (step 2b). Without a brief, or
+(references/drafting.md) and one fresh independent reviewer checks it from a
+lean review packet (step 2b). Without a brief, or
 when the user asks for the most thorough PR, you coordinate a researcher, a
 drafter and an independent reviewer. An unattended run is not a request for the
 cheapest PR. Tracetoon draws the comic, checks the result, and creates
@@ -126,31 +127,50 @@ reviewer separate.
      3–7 with a researcher, a drafter and a reviewer, each using the brief).
      2a. **Quick brief path:** follow [references/quick-path.md](references/quick-path.md).
      2b. **Reviewed brief path (the default with a brief).** You draft; one fresh
-     independent reviewer checks.
+     independent reviewer checks. You need only
+     [references/drafting.md](references/drafting.md) and
+     [references/reviewer-lean.md](references/reviewer-lean.md) here; don't read
+     contribution-workflow.md on this path.
      1. Read the brief and `context.json`; apply step 3's AI-policy bullets.
         Find the checks the repository requires (contributing guide, CI config)
         yourself; there is no separate researcher.
-     2. Draft inline, following the drafter prompt in
-        [references/contribution-workflow.md](references/contribution-workflow.md)
-        (section 2, including its evidence-brief rules): write
-        `change-map.json`, then `title.txt` and `body.md`. Tag factual sentences
-        with brief refs (`[CH1, commit:<sha>#2]`) and put
+     2. Draft inline following [references/drafting.md](references/drafting.md):
+        optionally a short `change-map.json`, then `title.txt` and `body.md`.
+        Tag factual sentences with brief refs (`[CH1, commit:<sha>#2]`) and put
         `<!-- tracetoon:validation -->` where the Validation section belongs.
      3. Run each required check that has no current receipt once with
         `tracetoon check --run <id> --name <check> -- <command>`.
      4. `tracetoon render --check --json --run <id>`: fix every sentence it lists
         and cover every listed row, up to three rounds.
-     5. `tracetoon render --json --run <id>`, then start **one fresh independent
-        reviewer** (Codex: `spawn_agent` with its default fork; Claude Code: one
-        `Agent` call) with the reviewer prompt in contribution-workflow.md
-        (section 3) and `review-input.json`. It writes `review.json` (v2) with
-        `drafter: { "mode": "inline" }` and `reviewer: { "mode": "delegated",
-        "agentId": "<its real id>" }`.
-     6. One correction round: check each finding against the patch, apply what
-        holds, `render --json`, then send the **same** reviewer the new
-        `review-input.json` (Codex: `followup_task`; Claude Code: SendMessage to
-        the same agent) to confirm or re-flag and update `review.json`.
-     7. Comic if wanted (step 5), then publish (step 7) once render reports the
+     5. `tracetoon render --json --run <id>`, then
+        `tracetoon review-packet --lean --run <id>`; it writes
+        `<run>/review-packet.md` (line-numbered body, compact brief rows,
+        hunk→symbol map, selected diff).
+     6. Start **one fresh reviewer**, not a fork (a fork costs the same and
+        carries your drafting reasoning). Its message is the contents of
+        `review-packet.md` followed by
+        [references/reviewer-lean.md](references/reviewer-lean.md), so it needn't
+        read files.
+        - **Claude Code:** one `Agent` call (subagent type general-purpose) with
+          that prompt; ask it to finish within about 4 turns.
+        - **Codex:** `spawn_agent` with `fork_turns: "none"` and the packet and
+          reviewer-lean.md in the message.
+        - **Reviewer model.** If this skill's config names a reviewer model (see
+          'Reviewer model' line below), pass it to the reviewer call (Claude
+          Agent `model`, Codex spawn_agent `model`); otherwise the reviewer uses
+          your model. The line is at the end of this Workflow section.
+
+        The reviewer writes `<run>/review-findings.json`:
+        `{"v":1,"reviewer":{"agentId":"<real id>"},"findings":[{"kind":"claim"|"omission","quote":"…","verdict":"contradicted"|"overstated"|"unsupported"|"missing","evidence":"diff:N | brief ref | path:line","fix":"…"}]}`.
+     7. `tracetoon review import --run <id> --agent-id <its real id>` turns the
+        findings into `review.json` v2 (drafter inline, reviewer delegated).
+        Never invent an agent id.
+     8. One correction round: check each finding against the patch, apply the
+        ones that hold, `render --json`, then send the **same** reviewer only
+        the changed lines and its previous findings to confirm or re-flag
+        (Claude Code: SendMessage; Codex: `followup_task`). It rewrites
+        `review-findings.json`; run `review import` again.
+     9. Comic if wanted (step 5), then publish (step 7) once render reports the
         review current.
 3. **Context.**
    Read the prepared `context.json`; do not repeat preparation. Note the PR template, existing PR,
@@ -207,7 +227,9 @@ reviewer separate.
    (`tracetoon query brief --run <id>`; `prepare` prints it and it heads
    `evidence-notes.md`). It lists the change units at the symbols that own them,
    the requests and commit-message sentences behind each (each scoped to its own
-   commit), checks dated against the edits, limits, and what not to claim. Read
+   commit), per-change behavior lines, process facts, checks dated against the
+   edits and limits; the rules on what not to claim are in
+   [references/drafting.md](references/drafting.md). Read
    the diff refs it cites before describing a hunk; `query why <path>` drills
    into one file. For a new PR,
    also write a one-line `title.txt`, preserving an explicit user-supplied title,
@@ -357,6 +379,8 @@ reviewer separate.
      existing PRs. Then continue any remaining user-authorized work, including
      monitoring CI, editing the PR or merging when requested, under native host
      rules. Creating the PR does not require ending the turn.
+
+Reviewer model: same as the main agent.
 
 ### Other commands
 
