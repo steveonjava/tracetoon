@@ -5,12 +5,13 @@
     "": {
       "name": "tracetoon",
       "dependencies": {
-        "@expo-google-fonts/comic-neue": "^0.4.1",
         "@resvg/resvg-wasm": "2.6.2",
+        "@sqlite.org/sqlite-wasm": "3.53.4-build2",
         "commander": "^14.0.0",
         "marked": "^16.0.0",
       },
       "devDependencies": {
+        "@expo-google-fonts/comic-neue": "^0.4.1",
         "@types/node": "^22.0.0",
         "bun-types": "^1.1.0",
         "prettier": "^3.3.0",
@@ -22,6 +23,8 @@
     "@expo-google-fonts/comic-neue": ["@expo-google-fonts/comic-neue@0.4.1", "", {}, "sha512-1kYFjZeSQnGFeMnwk/B7M3p+og5eW6QZLxjMeMiZ/7TnP2IEAdYo0Gjy3XH2TpoiBHS9PAwEHaETVthVPsF09Q=="],
 
     "@resvg/resvg-wasm": ["@resvg/resvg-wasm@2.6.2", "", {}, "sha512-FqALmHI8D4o6lk/LRWDnhw95z5eO+eAa6ORjVg09YRR7BkcM6oPHU9uyC0gtQG5vpFLvgpeU4+zEAz2H8APHNw=="],
+
+    "@sqlite.org/sqlite-wasm": ["@sqlite.org/sqlite-wasm@3.53.4-build2", "", {}, "sha512-kQVArGJA4z7s56Dm8t+eTBXad4LiohuVj9pfgDNOcxa+Ic5xMrWlLPTq6cT0hw5S4MIvtpsraW+B0wD+IPvC7A=="],
 
     "@types/node": ["@types/node@22.20.5", "", { "dependencies": { "undici-types": "~6.21.0" } }, "sha512-U2+DNr+wSjpsTS/wZGYHq7GcwfuSmKiKvoPvK22zwTlRhU91yOniN4qRR5KhIjvif7ysw/dz/hKmfDH0Ris4aA=="],
 

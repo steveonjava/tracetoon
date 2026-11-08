@@ -21,6 +21,8 @@ import {
 } from './commands/digest.ts';
 import { sourceCmd } from './commands/source.ts';
 import { queryCmd, ROW_CAP } from './commands/query.ts';
+import { relationalVectorMode } from './relational/index.ts';
+import { initRelational } from './relational/builder.ts';
 import { emit, exitCodeOf, UserError } from './commands/output.ts';
 import { publishCmd, renderCmd } from './commands/publish.ts';
 import {
@@ -63,7 +65,20 @@ const program = new Command()
 
 const g = () => program.opts<{ json?: boolean }>();
 let timedAction: { name: string; run?: string; started: number } | undefined;
-program.hook('preAction', (_command, action) => {
+// Shape test: the relational/vector arm loads SQLite and its embedding model first.
+const NO_EVIDENCE = new Set([
+  'art',
+  'reroll',
+  'prompts',
+  'install',
+  'uninstall',
+  'comic',
+]);
+program.hook('preAction', async (_command, action) => {
+  if (relationalVectorMode() && !NO_EVIDENCE.has(action.name()))
+    await initRelational().catch(() => {
+      /* fail open: prepare then reports the evidence context unavailable */
+    });
   if (
     action.opts().run &&
     ['render', 'publish', 'art', 'reroll', 'prompts'].includes(action.name())

@@ -1,6 +1,12 @@
 /** `tracetoon query`: ask a run's evidence graph a named question or read-only Cypher. */
 import { GraphError, withGraph } from '../graph/engine.ts';
-import { loadGraph } from '../graph/evidence.ts';
+import { loadGraph, R_CONTEXT_FILE } from '../graph/evidence.ts';
+import {
+  contextText,
+  relationalVectorMode,
+  type RelationalContext,
+} from '../relational/index.ts';
+import { readJson } from '../run.ts';
 import { findQuery, QUERIES, rawQuery, type Section } from '../graph/queries.ts';
 import { toToon } from '../graph/toon.ts';
 import { assertRunOwner, findRun } from '../run.ts';
@@ -38,6 +44,26 @@ export function queryCmd(cwd: string, words: string[], opts: QueryOpts): void {
   }
   const named = name ? findQuery(name) : undefined;
   if (name && !named) throw new UserError(`Unknown query "${name}".\n${queryHelp()}`);
+  // Shape test, relational/vector arm: the writer's evidence is the static context
+  // that prepare printed (also `query brief`); there are no lookups.
+  if (relationalVectorMode() && named?.name !== 'brief')
+    throw new UserError(
+      "This run's evidence is the context printed by `prepare` (also `tracetoon query brief`); no other lookups are available.",
+    );
+  if (relationalVectorMode()) {
+    const repo = repository(cwd);
+    const run = findRun(repo.gitDir, opts.run);
+    assertRunOwner(run, repo.root, repo.branch);
+    const ctx = readJson<RelationalContext>(run, R_CONTEXT_FILE);
+    if (!ctx)
+      throw new UserError(
+        `Run ${run.id} has no evidence context; refresh it with \`tracetoon prepare\`.`,
+      );
+    const text = contextText(ctx);
+    count('graph.queries');
+    emit(opts, { run: run.id, query: 'brief', text }, () => text);
+    return;
+  }
   if (named?.name === 'schema') {
     const sections = named.run(undefined as never, args);
     emit(opts, { query: 'schema', sections }, () => toToon(sections));

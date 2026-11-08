@@ -180,7 +180,7 @@ export function digestCmd(
   const path = writeJson(run, 'digest.json', digest);
   writeJson(run, 'digest-full.json', full);
   saveGraph(run, graph);
-  const brief = graph.graph ? graphBrief(graph.graph) : undefined;
+  const brief = graph.graph ? graphBrief(graph.graph, 60, run) : undefined;
   writeFileSync(join(run.dir, 'evidence-notes.md'), evidenceNotes(full, brief), 'utf8');
   const captured = submissionSnapshot(truth);
   writeJson(run, 'submission.json', captured);

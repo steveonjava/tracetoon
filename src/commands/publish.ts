@@ -353,7 +353,7 @@ export function renderCmd(cwd: string, opts: RenderOpts): Approval {
   const storedGraph = loadGraph(run);
   const briefCheck = applyBrief(
     bodyMd,
-    storedGraph ? graphBriefParts(storedGraph) : undefined,
+    storedGraph ? graphBriefParts(storedGraph, run) : undefined,
   );
   const draft = briefCheck.text;
   // The title: a person's choice is kept. A title edited on GitHub since
@@ -576,7 +576,7 @@ export function renderCmd(cwd: string, opts: RenderOpts): Approval {
     ctx.aiPolicy.text === 'author-written-recommended';
   const outline = evidenceNotes(
     readJson<TraceDigest>(run, 'digest-full.json') ?? digest,
-    storedGraph ? graphBrief(storedGraph) : undefined,
+    storedGraph ? graphBrief(storedGraph, 60, run) : undefined,
   );
   writeFileSync(join(run.dir, 'evidence-notes.md'), outline, 'utf8');
   writeJson(run, 'approval.json', approval);

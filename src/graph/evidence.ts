@@ -20,13 +20,23 @@ import { withGraph } from './engine.ts';
 import { briefParts, findQuery } from './queries.ts';
 import type { BriefParts } from './briefRender.ts';
 import { toToon } from './toon.ts';
+import {
+  budgetTokens,
+  contextText,
+  relationalVectorMode,
+  type RelationalContext,
+} from '../relational/index.ts';
+import { buildRelationalContext } from '../relational/builder.ts';
 
 export const GRAPH_FILE = 'evidence-graph.json';
 export const GRAPH_REVIEW_FILE = 'graph-review.json';
+/** The relational/vector arm's context (shape test). */
+export const R_CONTEXT_FILE = 'relational-context.json';
 
 export interface GraphOutcome {
   graph?: EvidenceGraph;
   derived?: GraphDerived;
+  relational?: RelationalContext;
   error?: string;
 }
 
@@ -110,15 +120,25 @@ export function graphEnricher(
   return (full, trails) => {
     try {
       if (verification) full.verification = verification;
-      const graph = measured('graph.build', () =>
-        buildEvidenceGraph({
-          full,
-          trails,
-          patch: submission(truth).patch,
-          commitFiles: commitFiles(truth),
-          commitLines: commitLines(truth),
-        }),
-      );
+      const inputs = {
+        full,
+        trails,
+        patch: submission(truth).patch,
+        commitFiles: commitFiles(truth),
+        commitLines: commitLines(truth),
+      };
+      if (relationalVectorMode()) {
+        // Shape test: the writer's context comes from the relational/vector store,
+        // built from the same inputs. The graph is still built, but only for
+        // render's shared Validation section; it doesn't annotate the digest.
+        out.relational = measured('relational.build', () =>
+          buildRelationalContext(inputs, { budgetTokens: budgetTokens() }),
+        );
+        out.graph = buildEvidenceGraph(inputs);
+        out.derived = deriveFromGraphJson(out.graph);
+        return undefined;
+      }
+      const graph = measured('graph.build', () => buildEvidenceGraph(inputs));
       const derived = measured('graph.derive', () => deriveFromGraphJson(graph));
       annotateDigest(full, derived);
       full.graph = graph.stats;
@@ -136,11 +156,13 @@ export function graphEnricher(
 }
 
 export function saveGraph(run: Run, outcome: GraphOutcome): void {
-  for (const f of [GRAPH_FILE, GRAPH_REVIEW_FILE])
+  for (const f of [GRAPH_FILE, GRAPH_REVIEW_FILE, R_CONTEXT_FILE])
     if (existsSync(join(run.dir, f))) unlinkSync(join(run.dir, f));
+  if (outcome.relational) writeJson(run, R_CONTEXT_FILE, outcome.relational);
   if (!outcome.graph || !outcome.derived) return;
   writeJson(run, GRAPH_FILE, outcome.graph);
-  writeJson(run, GRAPH_REVIEW_FILE, outcome.derived.review);
+  // The reviewer's graph-derived leads belong to the graph arm only.
+  if (!relationalVectorMode()) writeJson(run, GRAPH_REVIEW_FILE, outcome.derived.review);
 }
 
 export function loadGraph(run: Run): EvidenceGraph | undefined {
@@ -158,16 +180,44 @@ export function loadGraphReview(run: Run): GraphDerived['review'] | undefined {
  * Undefined when the graph can't be read; the digest never depends on it.
  */
 /** The brief as data, for `render` to write the Validation section and check ref tags. */
-export function graphBriefParts(graph: EvidenceGraph): BriefParts | undefined {
+export function graphBriefParts(graph: EvidenceGraph, run?: Run): BriefParts | undefined {
   try {
-    return withGraph(graph, (g) => briefParts(g));
+    const parts = withGraph(graph, (g) => briefParts(g));
+    if (!relationalVectorMode()) return parts;
+    // Shape test: the shared Validation rows, commit sentences for coverage (without
+    // the graph's file placement), and the relational context's refs for tag checks.
+    const ctx = run ? readJson<RelationalContext>(run, R_CONTEXT_FILE) : undefined;
+    const keep = (title: string) => parts.sections.find((s) => s.title === title);
+    const commits = keep('commitMessages');
+    return {
+      unchecked: parts.unchecked,
+      sections: [
+        ...(commits
+          ? [{ ...commits, rows: commits.rows.map(({ implementedBy: _p, ...r }) => r) }]
+          : []),
+        {
+          title: 'context',
+          columns: ['ref', 'text'],
+          rows: (ctx?.refs ?? []).map((r) => ({ ref: r.id, text: r.text })),
+        },
+        ...(keep('validation') ? [keep('validation')!] : []),
+      ],
+    };
   } catch {
     return undefined;
   }
 }
 
-export function graphBrief(graph: EvidenceGraph, rowCap = 60): string | undefined {
+export function graphBrief(
+  graph: EvidenceGraph,
+  rowCap = 60,
+  run?: Run,
+): string | undefined {
   try {
+    if (relationalVectorMode()) {
+      const ctx = run ? readJson<RelationalContext>(run, R_CONTEXT_FILE) : undefined;
+      return ctx ? contextText(ctx) : undefined;
+    }
     const sections = withGraph(graph, (g) => findQuery('brief')!.run(g, []));
     return toToon(sections, { rowCap }).trimEnd();
   } catch {
