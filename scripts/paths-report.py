@@ -30,6 +30,8 @@ for form in FORMS:
         big = sorted(((e.get('graph', e.get('sqlite'))['nodes'], e) for (g, qq, v), e in by.items() if qq == q and v == form and (e.get('graph') or e.get('sqlite'))['nodes'] >= 100), key=lambda x: x[0])
         faster = 0
         line = []
+        # A graph with no pairs for this question (e.g. no commits) has nothing to compare.
+        big = [(n, e) for n, e in big if e.get('graph', {}).get('pairsAsked')]
         for n, e in big:
             gp = e['graph'].get('warmP50')
             sp = e['sqlite'].get('warmP50') if 'sqlite' in e else None
