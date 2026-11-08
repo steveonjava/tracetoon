@@ -36,25 +36,25 @@ GraphInputs ─ETL→ SQLite record tables ─SQL joins→ exact links ┐
 
 ## Schema
 
-| table | key | foreign keys / join keys | what it holds |
-|---|---|---|---|
-| `session` | `ref` | | agent, band (included / ambiguous), span |
-| `fact` | `id` (S#, D#, P#) | `session_ref` → session; `turn_id` → fact (the prompt whose turn it is in) | requests, decisions (question → answer), plans; word count, `noise` flag (pasted tool output, interruption markers) |
-| `run` | `id` (R#, V#) | `session_ref`, `turn_id` | runs and receipts (kept in the store; not shown, see below) |
-| `edit` | `id` | `session_ref`; `turn_id`, `step_id` → fact; `file` | one captured edit, in trail order |
-| `edit_line` | | `edit_id` → edit; `norm` | normalized added lines that also survive in the PR |
-| `file` | `id` (F#) | `path` (unique) | status (new, deleted, renamed, modified), binary, role (behavior, tests, docs, config, generated), +/− |
-| `chunk` | `id` (H#) | `file_id` → file | new-file line range, enclosing scope, names defined and removed, test titles, search body |
-| `chunk_line` | | `chunk_id` → chunk; `norm` | every changed line with sign, line number and normalized text |
-| `symbol` | | `chunk_id`; `name` | names defined, removed, or test titles |
-| `ident` | | `chunk_id`; `name` | identifiers used on added lines (for "test uses X" and centrality joins) |
-| `commit_` | `sha` | `ref` (12 chars, unique) | subject, body, time |
-| `commit_sentence` | `id` (`commit:<sha>#n`) | `sha` → commit_ | each body sentence or bullet; `result` flag for sentences that report results |
-| `commit_file`, `commit_line` | | `sha` → commit_; `path`, `norm` | the commit's touched files and its own added and removed lines |
-| `chunk_fts` | | `chunk_id` | FTS5 (porter, unicode61) over the chunk body, identifiers split into words |
-| `query`, `hit` | | `query_id` → query; `chunk_id` → chunk | every query and every ranker hit (rank, raw score) |
-| `fused` | | | RRF per (query, chunk): score, number of rankers that agree, cosine, whether the chunk was named |
-| `link` | | `chunk_id` → chunk; `src` (a fact, commit or sentence id) | the evidence: `edit`, `commit`, `search`, with weights |
+| table                        | key                     | foreign keys / join keys                                                   | what it holds                                                                                                       |
+| ---------------------------- | ----------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `session`                    | `ref`                   |                                                                            | agent, band (included / ambiguous), span                                                                            |
+| `fact`                       | `id` (S#, D#, P#)       | `session_ref` → session; `turn_id` → fact (the prompt whose turn it is in) | requests, decisions (question → answer), plans; word count, `noise` flag (pasted tool output, interruption markers) |
+| `run`                        | `id` (R#, V#)           | `session_ref`, `turn_id`                                                   | runs and receipts (kept in the store; not shown, see below)                                                         |
+| `edit`                       | `id`                    | `session_ref`; `turn_id`, `step_id` → fact; `file`                         | one captured edit, in trail order                                                                                   |
+| `edit_line`                  |                         | `edit_id` → edit; `norm`                                                   | normalized added lines that also survive in the PR                                                                  |
+| `file`                       | `id` (F#)               | `path` (unique)                                                            | status (new, deleted, renamed, modified), binary, role (behavior, tests, docs, config, generated), +/−              |
+| `chunk`                      | `id` (H#)               | `file_id` → file                                                           | new-file line range, enclosing scope, names defined and removed, test titles, search body                           |
+| `chunk_line`                 |                         | `chunk_id` → chunk; `norm`                                                 | every changed line with sign, line number and normalized text                                                       |
+| `symbol`                     |                         | `chunk_id`; `name`                                                         | names defined, removed, or test titles                                                                              |
+| `ident`                      |                         | `chunk_id`; `name`                                                         | identifiers used on added lines (for "test uses X" and centrality joins)                                            |
+| `commit_`                    | `sha`                   | `ref` (12 chars, unique)                                                   | subject, body, time                                                                                                 |
+| `commit_sentence`            | `id` (`commit:<sha>#n`) | `sha` → commit_                                                            | each body sentence or bullet; `result` flag for sentences that report results                                       |
+| `commit_file`, `commit_line` |                         | `sha` → commit_; `path`, `norm`                                            | the commit's touched files and its own added and removed lines                                                      |
+| `chunk_fts`                  |                         | `chunk_id`                                                                 | FTS5 (porter, unicode61) over the chunk body, identifiers split into words                                          |
+| `query`, `hit`               |                         | `query_id` → query; `chunk_id` → chunk                                     | every query and every ranker hit (rank, raw score)                                                                  |
+| `fused`                      |                         |                                                                            | RRF per (query, chunk): score, number of rankers that agree, cosine, whether the chunk was named                    |
+| `link`                       |                         | `chunk_id` → chunk; `src` (a fact, commit or sentence id)                  | the evidence: `edit`, `commit`, `search`, with weights                                                              |
 
 Commit-sentence numbering uses the same splitting rule that `render` checks sentence coverage against, so `commit:<sha>#n` means the same sentence on both sides.
 
@@ -216,12 +216,12 @@ src/graph/vendor/: [F33] README.md (new generated +12/−0), …
 
 ## Measured
 
-| case | diff lines | chunks | queries | relational build |
-|---|---|---|---|---|
-| fixture (unit test, 1,000 synthetic lines) | ~1,030 | ~230 | | < 2 s asserted (about 150 ms) |
-| this repository, one commit (`c123160`) | 160 | 12 | 77 | about 0.18 s |
-| this repository, one large commit (`8853328`) | 4,300 | 177 | 50 | about 0.3 s |
-| this repository, 16-commit evidence-graph branch | 7,900 | 274 | 202 | about 0.55 s standalone, 0.87 s in a full `prepare` |
+| case                                             | diff lines | chunks | queries | relational build                                    |
+| ------------------------------------------------ | ---------- | ------ | ------- | --------------------------------------------------- |
+| fixture (unit test, 1,000 synthetic lines)       | ~1,030     | ~230   |         | < 2 s asserted (about 150 ms)                       |
+| this repository, one commit (`c123160`)          | 160        | 12     | 77      | about 0.18 s                                        |
+| this repository, one large commit (`8853328`)    | 4,300      | 177    | 50      | about 0.3 s                                         |
+| this repository, 16-commit evidence-graph branch | 7,900      | 274    | 202     | about 0.55 s standalone, 0.87 s in a full `prepare` |
 
 For the last row, the 0.55 s is about 0.45 s of retrieval and 0.1 s of packing.
 
