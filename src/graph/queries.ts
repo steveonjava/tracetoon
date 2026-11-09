@@ -3,9 +3,11 @@
  * graph; TypeScript only groups and orders rows so results are deterministic and
  * compact. Results are sections of rows, printed as TOON by `tracetoon query`.
  */
-import { GraphError, type GraphEngine } from './engine.ts';
+import { GraphError, type EvidenceDb } from './db.ts';
 import { shownCommand } from './briefRender.ts';
 import { SCHEMA_DOC } from './model.ts';
+import { SQL_SCHEMA_DOC } from '../sql/schemaDoc.ts';
+import { evidenceEngine } from './store.ts';
 import { DO_NOT_SAY_COLUMNS, doNotSayRows } from './doNotSay.ts';
 import {
   earlierFailure,
@@ -27,7 +29,7 @@ export interface NamedQuery {
   name: string;
   args: string;
   help: string;
-  run(g: GraphEngine, args: string[]): Section[];
+  run(g: EvidenceDb, args: string[]): Section[];
 }
 
 const CHECK_KINDS = ['test', 'build', 'typecheck', 'lint', 'eval'];
@@ -44,7 +46,7 @@ const section = (title: string, columns: string[], rows: Record<string, unknown>
 
 /** Resolve a target to a file path or hunk id; accepts `path`, `path:line`, `H3`, `diff:120`. */
 function target(
-  g: GraphEngine,
+  g: EvidenceDb,
   raw: string | undefined,
 ): { file?: string; hunk?: string } {
   if (!raw)
@@ -53,9 +55,11 @@ function target(
   const diff = /^diff:(\d+)/.exec(raw);
   const line = diff ? undefined : /^(.+?):(\d+)$/.exec(raw);
   if (diff || line) {
-    const hunks = g.run(
-      'MATCH (h:Hunk) RETURN h.id AS id, h.diff AS diff, h.file AS file, h.start AS start, h.end AS end',
-    ).rows;
+    const hunks = g.run({
+      cypher:
+        'MATCH (h:Hunk) RETURN h.id AS id, h.diff AS diff, h.file AS file, h.start AS start, h.end AS end',
+      sql: `SELECT id, diff, file, start, "end" FROM hunks ORDER BY rowid`,
+    }).rows;
     const n = Number((diff ?? line)![diff ? 1 : 2]);
     const hit = hunks.find((h) => {
       if (diff) {
@@ -69,7 +73,10 @@ function target(
   }
   const path = raw.replace(/^\.\//, '');
   const found = g.run(
-    'MATCH (f:File) WHERE f.id = $p OR f.id ENDS WITH $s RETURN f.id AS id',
+    {
+      cypher: 'MATCH (f:File) WHERE f.id = $p OR f.id ENDS WITH $s RETURN f.id AS id',
+      sql: `SELECT id FROM files WHERE id = $p OR substr(id, -length($s)) = $s ORDER BY rowid`,
+    },
     {
       p: path,
       s: `/${path}`,
@@ -84,14 +91,30 @@ function target(
 }
 
 /** Per prompt: the turn's surviving edits into the target, its decisions and plans. */
-function turnsInto(g: GraphEngine, t: { file?: string; hunk?: string }): Section {
+function turnsInto(g: EvidenceDb, t: { file?: string; hunk?: string }): Section {
   const rows = g.run(
-    `${t.hunk ? 'MATCH (h0:Hunk {id: $id})<-[:SURVIVES_IN]-(e:Edit)' : 'MATCH (:File {id: $id})<-[:EDITS]-(e:Edit)'}-[:IN_SESSION]->(:Session {band: 'included'})
+    {
+      cypher: `${t.hunk ? 'MATCH (h0:Hunk {id: $id})<-[:SURVIVES_IN]-(e:Edit)' : 'MATCH (:File {id: $id})<-[:EDITS]-(e:Edit)'}-[:IN_SESSION]->(:Session {band: 'included'})
      OPTIONAL MATCH (e)-[s:SURVIVES_IN]->(h:Hunk)
      OPTIONAL MATCH (e)-[:IN_TURN]->(p:Prompt)
      OPTIONAL MATCH (x)-[:IN_TURN]->(p) WHERE x:Decision OR x:Plan
      RETURN p.id AS prompt, p.text AS text, p.pushback AS pushback, e.id AS edit,
             e.surviving AS surviving, h.diff AS diff, h.file AS hfile, collect(DISTINCT x.id) AS facts`,
+      sql: `SELECT p.id AS prompt, p.text AS text, p.pushback AS pushback, e.id AS edit,
+            e.surviving AS surviving, h.diff AS diff, h.file AS hfile,
+            json_group_array(DISTINCT x.id) FILTER (WHERE x.id IS NOT NULL) AS facts
+     FROM edits e
+     JOIN sessions s ON s.id = e.session AND s.band = 'included'
+     ${t.hunk ? 'JOIN edit_hunk e0 ON e0.edit = e.id AND e0.hunk = $id' : 'JOIN edit_file e0 ON e0.edit = e.id AND e0.file = $id'}
+     LEFT JOIN edit_hunk eh ON eh.edit = e.id
+     LEFT JOIN hunks h ON h.id = eh.hunk
+     LEFT JOIN in_turn it ON it.kind = 'Edit' AND it.id = e.id
+     LEFT JOIN prompts p ON p.id = it.prompt
+     LEFT JOIN turn_facts x ON x.prompt = p.id
+     GROUP BY p.id, e.id, h.id
+     ORDER BY e.rowid, eh.rowid`,
+      json: ['facts'],
+    },
     { id: t.hunk ?? t.file },
   ).rows;
   type Turn = {
@@ -147,7 +170,7 @@ function turnsInto(g: GraphEngine, t: { file?: string; hunk?: string }): Section
 
 /** Check runs (test, build, …) of included sessions after a file's last captured edit. */
 export function checksAfterLastEdit(
-  g: GraphEngine,
+  g: EvidenceDb,
   file?: string,
 ): {
   file: string;
@@ -158,18 +181,37 @@ export function checksAfterLastEdit(
   // Two indexed lookups, then the time comparison here: a files × runs join in
   // Cypher grows with their product.
   const files = g.run(
-    `MATCH (f:File {inPr: true}) ${file ? 'WHERE f.id = $file' : ''}
+    {
+      cypher: `MATCH (f:File {inPr: true}) ${file ? 'WHERE f.id = $file' : ''}
      OPTIONAL MATCH (f)<-[:EDITS]-(e:Edit)-[:IN_SESSION]->(:Session {band: 'included'})
      RETURN f.id AS file, f.role AS role, max(e.t) AS lastEdit, count(e) AS edits,
             collect(CASE WHEN e.via = 'shell' THEN e.t END) AS shellTimes,
             collect(CASE WHEN e.via IS NULL THEN e.t END) AS toolTimes`,
+      sql: `SELECT f.id AS file, f.role AS role, max(e.t) AS lastEdit, count(e.id) AS edits,
+            json_group_array(e.t) FILTER (WHERE e.via = 'shell' AND e.t IS NOT NULL) AS shellTimes,
+            json_group_array(e.t) FILTER (WHERE e.id IS NOT NULL AND e.via IS NULL AND e.t IS NOT NULL) AS toolTimes
+     FROM files f
+     LEFT JOIN (SELECT e.* FROM edits e JOIN sessions s ON s.id = e.session AND s.band = 'included') e
+       ON e.file = f.id
+     WHERE f."inPr" = 1 ${file ? 'AND f.id = $file' : ''}
+     GROUP BY f.id
+     ORDER BY f.rowid`,
+      json: ['shellTimes', 'toolTimes'],
+    },
     { file: file ?? null },
   ).rows;
   const runs = g
     .run(
-      `MATCH (r:Run)-[:IN_SESSION]->(:Session {band: 'included'})
+      {
+        cypher: `MATCH (r:Run)-[:IN_SESSION]->(:Session {band: 'included'})
        WHERE r.t IS NOT NULL AND r.kind IN $kinds AND r.revision <> 'after later work'
        RETURN r.id AS id, r.outcome AS outcome, r.kind AS kind, r.t AS t`,
+        sql: `SELECT r.id AS id, r.outcome AS outcome, r.kind AS kind, r.t AS t
+       FROM runs r JOIN sessions s ON s.id = r.session AND s.band = 'included'
+       WHERE r.t IS NOT NULL AND r.kind IN (SELECT value FROM json_each($kinds))
+         AND r.revision <> 'after later work'
+       ORDER BY r.rowid`,
+      },
       { kinds: CHECK_KINDS },
     )
     .rows.map((r) => ({
@@ -216,17 +258,33 @@ export function checksAfterLastEdit(
     }));
 }
 
-export function unexplainedHunks(g: GraphEngine): Record<string, unknown>[] {
+export function unexplainedHunks(g: EvidenceDb): Record<string, unknown>[] {
   return g
-    .run(
-      `MATCH (h:Hunk)-[:OF]->(f:File)
+    .run({
+      cypher: `MATCH (h:Hunk)-[:OF]->(f:File)
        WHERE f.role IN ['behavior', 'tests']
          AND NOT EXISTS { MATCH (:Session {band: 'included'})<-[:IN_SESSION]-(:Edit)-[:SURVIVES_IN]->(h) }
        OPTIONAL MATCH (c:Commit)-[:TOUCHES]->(f)
        OPTIONAL MATCH (s:Session)-[:MADE]->(c)
        RETURN h.id AS hunk, h.diff AS diff, f.id AS file, h.added AS added, h.removed AS removed,
               collect(DISTINCT c.id) AS commits, count(DISTINCT s) AS sessionCommits`,
-    )
+      sql: `SELECT h.id AS hunk, h.diff AS diff, f.id AS file, h.added AS added, h.removed AS removed,
+              json_group_array(DISTINCT cf."commit") FILTER (WHERE cf."commit" IS NOT NULL) AS commits,
+              count(DISTINCT sc.session) AS sessionCommits
+       FROM hunks h
+       JOIN files f ON f.id = h.file
+       LEFT JOIN commit_file cf ON cf.file = f.id
+       LEFT JOIN session_commit sc ON sc."commit" = cf."commit"
+       WHERE f.role IN ('behavior', 'tests')
+         AND NOT EXISTS (
+           SELECT 1 FROM edit_hunk eh
+           JOIN edits e ON e.id = eh.edit
+           JOIN sessions s ON s.id = e.session AND s.band = 'included'
+           WHERE eh.hunk = h.id)
+       GROUP BY h.id
+       ORDER BY h.rowid`,
+      json: ['commits'],
+    })
     .rows.map((r): Record<string, unknown> => ({
       ...r,
       commits: ((r.commits as string[]) ?? []).sort(),
@@ -447,17 +505,32 @@ export interface PrTurns {
  * A session shared with earlier work also holds that work's turns; they are
  * not this PR's history.
  */
-export function thisPrTurns(g: GraphEngine): PrTurns {
-  const rows = g.run(
-    `MATCH (p:Prompt)-[:IN_SESSION]->(s:Session {band: 'included'})
+export function thisPrTurns(g: EvidenceDb): PrTurns {
+  const rows = g.run({
+    cypher: `MATCH (p:Prompt)-[:IN_SESSION]->(s:Session {band: 'included'})
      OPTIONAL MATCH (e:Edit)-[:IN_TURN]->(p)
      RETURN p.id AS id, p.t AS t, p.text AS text, s.id AS session, count(e) AS edits,
             sum(CASE WHEN e.surviving > 0 AND e.inPr = true THEN 1 ELSE 0 END) AS surviving`,
-  ).rows;
-  const made = g.run(
-    `MATCH (s:Session {band: 'included'})-[:MADE]->(k:Commit) WHERE k.t IS NOT NULL
+    sql: `SELECT p.id AS id, p.t AS t, p.text AS text, s.id AS session, count(e.id) AS edits,
+            sum(CASE WHEN e.surviving > 0 AND e."inPr" = 1 THEN 1 ELSE 0 END) AS surviving
+     FROM prompts p
+     JOIN in_session ps ON ps.kind = 'Prompt' AND ps.id = p.id
+     JOIN sessions s ON s.id = ps.session AND s.band = 'included'
+     LEFT JOIN in_turn it ON it.kind = 'Edit' AND it.prompt = p.id
+     LEFT JOIN edits e ON e.id = it.id
+     GROUP BY p.id, s.id
+     ORDER BY min(p.rowid)`,
+  }).rows;
+  const made = g.run({
+    cypher: `MATCH (s:Session {band: 'included'})-[:MADE]->(k:Commit) WHERE k.t IS NOT NULL
      RETURN s.id AS session, k.t AS t`,
-  ).rows;
+    sql: `SELECT s.id AS session, k.t AS t
+     FROM session_commit sc
+     JOIN sessions s ON s.id = sc.session AND s.band = 'included'
+     JOIN commits k ON k.id = sc."commit"
+     WHERE k.t IS NOT NULL
+     ORDER BY s.rowid, sc.rowid DESC`,
+  }).rows;
   const productive = new Set<string>();
   const leadIn = new Set<string>();
   const start = new Map<string, string>();
@@ -524,11 +597,17 @@ const substantive = (text: unknown) => {
   return !!t && !ACK.test(t) && t.split(/\s+/).length >= 2;
 };
 /** Whether a session id is one of the included sessions. */
-const includedSession = (g: GraphEngine, id: unknown) =>
+const includedSession = (g: EvidenceDb, id: unknown) =>
   id != null &&
-  g.run(`MATCH (s:Session {band: 'included'}) WHERE s.id = $id RETURN s.id AS id`, {
-    id: String(id),
-  }).rows.length > 0;
+  g.run(
+    {
+      cypher: `MATCH (s:Session {band: 'included'}) WHERE s.id = $id RETURN s.id AS id`,
+      sql: `SELECT id FROM sessions WHERE band = 'included' AND id = $id`,
+    },
+    {
+      id: String(id),
+    },
+  ).rows.length > 0;
 /** At most this many background rows. */
 const MAX_BACKGROUND = 4;
 
@@ -543,14 +622,19 @@ const MAX_BACKGROUND = 4;
  * goals first, then the latest earlier plans and decisions, in time order.
  */
 export function backgroundRows(
-  g: GraphEngine,
+  g: EvidenceDb,
   turns: PrTurns,
   exclude: Set<string>,
 ): Record<string, unknown>[] {
-  const prompts = g.run(
-    `MATCH (p:Prompt)-[:IN_SESSION]->(s:Session {band: 'included'})
+  const prompts = g.run({
+    cypher: `MATCH (p:Prompt)-[:IN_SESSION]->(s:Session {band: 'included'})
      RETURN p.id AS id, p.t AS t, p.text AS text, s.id AS session`,
-  ).rows;
+    sql: `SELECT p.id AS id, p.t AS t, p.text AS text, s.id AS session
+     FROM prompts p
+     JOIN in_session ps ON ps.kind = 'Prompt' AND ps.id = p.id
+     JOIN sessions s ON s.id = ps.session AND s.band = 'included'
+     ORDER BY p.rowid`,
+  }).rows;
   const promptSession = new Map(prompts.map((p) => [String(p.id), String(p.session)]));
   const promptTime = new Map(prompts.map((p) => [String(p.id), String(p.t ?? '')]));
   const byTime = (a: Record<string, unknown>, b: Record<string, unknown>) =>
@@ -584,14 +668,23 @@ export function backgroundRows(
   // is shown; before a captured prompt it is the tail of earlier work.
   const withPrompts = new Set(promptSession.values());
   const earlier = g
-    .run(
-      `MATCH (x) WHERE x:Plan OR x:Decision
+    .run({
+      cypher: `MATCH (x) WHERE x:Plan OR x:Decision
        OPTIONAL MATCH (x)-[:IN_TURN]->(p:Prompt)
        OPTIONAL MATCH (x)-[:IN_SESSION]->(s:Session)
        RETURN x.id AS id, labels(x)[0] AS label, x.approved AS approved, x.t AS t,
               coalesce(x.answers, x.excerpt, x.text) AS text, p.id AS turn, p.t AS turnT,
               coalesce(s.id, x.session) AS session`,
-    )
+      sql: `SELECT x.id AS id, x.kind AS label, x.approved AS approved, x.t AS t,
+            coalesce(x.answers, x.excerpt, x.text) AS text, p.id AS turn, p.t AS "turnT",
+            coalesce(s.id, x.session) AS session
+     FROM facts x
+     LEFT JOIN in_turn it ON it.kind = x.kind AND it.id = x.id
+     LEFT JOIN prompts p ON p.id = it.prompt
+     LEFT JOIN in_session xs ON xs.kind = x.kind AND xs.id = x.id
+     LEFT JOIN sessions s ON s.id = xs.session
+     ORDER BY x.n`,
+    })
     .rows.filter((x) => {
       if (exclude.has(String(x.id))) return false;
       if (x.turn == null)
@@ -659,7 +752,7 @@ export function behaviorOf(hunks: Record<string, unknown>[]): string[] {
  * failed commands. Counts and ids only; no judgments.
  */
 function processRows(
-  g: GraphEngine,
+  g: EvidenceDb,
   turns: PrTurns,
   checkRuns: Record<string, unknown>[],
   background: Set<string> = new Set(),
@@ -668,22 +761,34 @@ function processRows(
   const add = (kind: string, fact: string, cites: string[] = []) =>
     out.push({ ref: `PR${out.length + 1}`, kind, fact, cites });
   const sessions = g
-    .run(
-      `MATCH (s:Session)
+    .run({
+      cypher: `MATCH (s:Session)
        OPTIONAL MATCH (e:Edit)-[:IN_SESSION]->(s)
        RETURN s.id AS id, s.agent AS agent, s.band AS band, s.failedCommands AS failed,
               s.failedCommand AS failedCommand, count(e) AS edits,
               sum(CASE WHEN e.surviving > 0 AND e.inPr = true THEN 1 ELSE 0 END) AS surviving`,
-    )
+      sql: `SELECT s.id AS id, s.agent AS agent, s.band AS band, s."failedCommands" AS failed,
+            s."failedCommand" AS "failedCommand", count(e.id) AS edits,
+            sum(CASE WHEN e.surviving > 0 AND e."inPr" = 1 THEN 1 ELSE 0 END) AS surviving
+     FROM sessions s
+     LEFT JOIN in_session es ON es.kind = 'Edit' AND es.session = s.id
+     LEFT JOIN edits e ON e.id = es.id
+     GROUP BY s.id
+     ORDER BY s.rowid`,
+    })
     .rows.sort(
       (a, b) =>
         Number(a.band !== 'included') - Number(b.band !== 'included') ||
         String(a.id).localeCompare(String(b.id)),
     );
   const made = new Map<string, string[]>();
-  for (const r of g.run(
-    'MATCH (s:Session)-[:MADE]->(k:Commit) RETURN s.id AS session, k.id AS commit',
-  ).rows)
+  for (const r of g.run({
+    cypher:
+      'MATCH (s:Session)-[:MADE]->(k:Commit) RETURN s.id AS session, k.id AS commit',
+    sql: `SELECT s.id AS session, k.id AS "commit"
+     FROM session_commit sc JOIN sessions s ON s.id = sc.session JOIN commits k ON k.id = sc."commit"
+     ORDER BY s.rowid, sc.rowid DESC`,
+  }).rows)
     made.set(String(r.session), [
       ...(made.get(String(r.session)) ?? []),
       String(r.commit),
@@ -720,11 +825,17 @@ function processRows(
   const inScope = (turn: unknown) =>
     !!turn && (turns.productive.has(String(turn)) || turns.leadIn.has(String(turn)));
   const facts = g
-    .run(
-      `MATCH (x)-[:IN_TURN]->(p:Prompt) WHERE x:Plan OR x:Decision
+    .run({
+      cypher: `MATCH (x)-[:IN_TURN]->(p:Prompt) WHERE x:Plan OR x:Decision
        RETURN x.id AS id, labels(x)[0] AS label, x.approved AS approved, x.t AS t,
               x.text AS title, x.truncated AS truncated, p.id AS turn`,
-    )
+      sql: `SELECT x.id AS id, x.kind AS label, x.approved AS approved, x.t AS t,
+            x.text AS title, x.truncated AS truncated, p.id AS turn
+     FROM facts x
+     JOIN in_turn it ON it.kind = x.kind AND it.id = x.id
+     JOIN prompts p ON p.id = it.prompt
+     ORDER BY x.n`,
+    })
     .rows.filter((x) => inScope(x.turn))
     .sort(
       (a, b) =>
@@ -737,11 +848,16 @@ function processRows(
   // (earlier turns, or before the first captured prompt): `background` shows
   // them, so "none was recorded" would be wrong.
   const elsewhere = g
-    .run(
-      `MATCH (x) WHERE x:Plan OR x:Decision
+    .run({
+      cypher: `MATCH (x) WHERE x:Plan OR x:Decision
        OPTIONAL MATCH (x)-[:IN_TURN]->(p:Prompt)
        RETURN x.id AS id, labels(x)[0] AS label, x.approved AS approved, x.t AS t, p.id AS turn`,
-    )
+      sql: `SELECT x.id AS id, x.kind AS label, x.approved AS approved, x.t AS t, p.id AS turn
+     FROM facts x
+     LEFT JOIN in_turn it ON it.kind = x.kind AND it.id = x.id
+     LEFT JOIN prompts p ON p.id = it.prompt
+     ORDER BY x.n`,
+    })
     .rows.filter((x) => !inScope(x.turn) && background.has(String(x.id)))
     .sort(
       (a, b) =>
@@ -800,7 +916,13 @@ function processRows(
   // whether a pass came after the last commit.
   const runSession = new Map(
     g
-      .run('MATCH (r:Run)-[:IN_SESSION]->(s:Session) RETURN r.id AS id, s.id AS session')
+      .run({
+        cypher:
+          'MATCH (r:Run)-[:IN_SESSION]->(s:Session) RETURN r.id AS id, s.id AS session',
+        sql: `SELECT r.id AS id, s.id AS session
+     FROM runs r JOIN in_session rs ON rs.kind = 'Run' AND rs.id = r.id JOIN sessions s ON s.id = rs.session
+     ORDER BY r.rowid`,
+      })
       .rows.map((r) => [String(r.id), String(r.session)]),
   );
   const scoped = checkRuns.filter((r) => {
@@ -808,7 +930,10 @@ function processRows(
     return !from || String(r.t ?? '') >= from;
   });
   const lastCommit = g
-    .run('MATCH (k:Commit) WHERE k.t IS NOT NULL RETURN k.id AS id, k.t AS t')
+    .run({
+      cypher: 'MATCH (k:Commit) WHERE k.t IS NOT NULL RETURN k.id AS id, k.t AS t',
+      sql: `SELECT id, t FROM commits WHERE t IS NOT NULL ORDER BY rowid`,
+    })
     .rows.sort((a, b) => String(b.t).localeCompare(String(a.t)))[0];
   for (const kind of CHECK_KINDS) {
     const rs = scoped.filter((r) => r.kind === kind);
@@ -883,7 +1008,7 @@ function processRows(
  * establish. Each row cites
  * its evidence; nothing in it is inferred beyond the graph.
  */
-export function brief(g: GraphEngine): Section[] {
+export function brief(g: EvidenceDb): Section[] {
   return briefParts(g).sections;
 }
 
@@ -893,7 +1018,7 @@ export function brief(g: GraphEngine): Section[] {
  * captured edit.
  */
 export function briefParts(
-  g: GraphEngine,
+  g: EvidenceDb,
   opts: { layout?: BriefLayout } = {},
 ): {
   sections: Section[];
@@ -903,14 +1028,15 @@ export function briefParts(
   hunkLinks: Record<string, string[]>;
 } {
   const changes = g
-    .run(
-      `MATCH (c:Change)
+    .run({
+      cypher: `MATCH (c:Change)
        RETURN c.id AS id, c.key AS key, c.files AS files, c.roles AS roles, c.symbols AS symbols,
               c.added AS added, c.removed AS removed, c.branches AS branches`,
-    )
+      sql: `SELECT id, "key", files, roles, symbols, added, removed, branches FROM changes ORDER BY rowid`,
+    })
     .rows.sort((a, b) => Number(String(a.id).slice(2)) - Number(String(b.id).slice(2)));
-  const hunkRows = g.run(
-    `MATCH (c:Change)-[:HAS]->(h:Hunk)
+  const hunkRows = g.run({
+    cypher: `MATCH (c:Change)-[:HAS]->(h:Hunk)
      OPTIONAL MATCH (h)<-[:SURVIVES_IN]-(e:Edit)-[:IN_SESSION]->(:Session {band: 'included'})
      OPTIONAL MATCH (h)<-[:INTRODUCED]-(k:Commit)
      RETURN c.id AS change, h.id AS hunk, h.file AS file, h.diff AS diff, h.scope AS scope,
@@ -918,37 +1044,76 @@ export function briefParts(
             h.conds AS conds,
             h.tests AS tests, h.words AS words, count(DISTINCT e) AS edits,
             collect(DISTINCT k.id) AS commits`,
-  ).rows;
+    sql: `SELECT ch.change AS change, h.id AS hunk, h.file AS file, h.diff AS diff, h.scope AS scope,
+            h.touched AS symbols, h.branches AS branches, h.fresh AS fresh, h.pairs AS pairs,
+            h.conds AS conds,
+            h.tests AS tests, h.words AS words, count(DISTINCT e.id) AS edits,
+            json_group_array(DISTINCT ck."commit") FILTER (WHERE ck."commit" IS NOT NULL) AS commits
+     FROM change_hunk ch
+     JOIN hunks h ON h.id = ch.hunk
+     LEFT JOIN (SELECT eh.hunk, e.id FROM edit_hunk eh
+                JOIN edits e ON e.id = eh.edit
+                JOIN sessions s ON s.id = e.session AND s.band = 'included') e ON e.hunk = h.id
+     LEFT JOIN commit_hunk ck ON ck.hunk = h.id
+     GROUP BY ch.change, h.id
+     ORDER BY (SELECT c.rowid FROM changes c WHERE c.id = ch.change), ch.rowid DESC`,
+    json: ['commits'],
+  }).rows;
   const fileRole = new Map(
     g
-      .run('MATCH (f:File {inPr: true}) RETURN f.id AS id, f.role AS role')
+      .run({
+        cypher: 'MATCH (f:File {inPr: true}) RETURN f.id AS id, f.role AS role',
+        sql: `SELECT id, role FROM files WHERE "inPr" = 1 ORDER BY rowid`,
+      })
       .rows.map((r) => [String(r.id), String(r.role)]),
   );
-  const asked = g.run(
-    `MATCH (c:Change)-[a:ASKED_BY]->(p:Prompt)
+  const asked = g.run({
+    cypher: `MATCH (c:Change)-[a:ASKED_BY]->(p:Prompt)
      OPTIONAL MATCH (x)-[:IN_TURN]->(p) WHERE x:Decision OR x:Plan
      RETURN c.id AS change, p.id AS id, p.text AS text, p.pushback AS pushback, a.how AS how,
             collect(DISTINCT x.id) AS facts`,
-  ).rows;
+    sql: `SELECT cp.change AS change, p.id AS id, p.text AS text, p.pushback AS pushback, cp.how AS how,
+            json_group_array(DISTINCT x.id) FILTER (WHERE x.id IS NOT NULL) AS facts
+     FROM change_prompt cp
+     JOIN prompts p ON p.id = cp.prompt
+     LEFT JOIN turn_facts x ON x.prompt = p.id
+     GROUP BY cp.change, p.id, cp.how
+     ORDER BY cp.rowid`,
+    json: ['facts'],
+  }).rows;
   // Plans and decisions with the turn they were made in.
   const turnFacts = new Map(
     g
-      .run(
-        `MATCH (x) WHERE x:Decision OR x:Plan
+      .run({
+        cypher: `MATCH (x) WHERE x:Decision OR x:Plan
          OPTIONAL MATCH (x)-[:IN_TURN]->(p:Prompt)
          RETURN x.id AS id, labels(x)[0] AS label, x.approved AS approved, x.t AS t,
                 coalesce(x.answers, x.excerpt, x.text) AS text, x.text AS title,
                 x.truncated AS truncated, p.id AS turn`,
-      )
+        sql: `SELECT x.id AS id, x.kind AS label, x.approved AS approved, x.t AS t,
+                coalesce(x.answers, x.excerpt, x.text) AS text, x.text AS title,
+                x.truncated AS truncated, p.id AS turn
+         FROM facts x
+         LEFT JOIN in_turn it ON it.kind = x.kind AND it.id = x.id
+         LEFT JOIN prompts p ON p.id = it.prompt
+         ORDER BY x.n`,
+      })
       .rows.map((r) => [String(r.id), r]),
   );
   const turns = thisPrTurns(g);
-  const said = g.run(
-    `MATCH (c:Change)-[:EXPLAINED_BY]->(k:Commit)
+  const said = g.run({
+    cypher: `MATCH (c:Change)-[:EXPLAINED_BY]->(k:Commit)
      OPTIONAL MATCH (k)-[:SAYS]->(m:CommitClaim)
      RETURN c.id AS change, k.id AS commit, k.subject AS subject,
             collect(DISTINCT {id: m.id, text: m.text, result: m.assertsResult}) AS claims`,
-  ).rows;
+    sql: `SELECT cc.change AS change, k.id AS "commit", k.subject AS subject,
+            (SELECT json_group_array(json_object('id', m.id, 'text', m.text,
+                      'result', json(CASE m."assertsResult" WHEN 1 THEN 'true' ELSE 'false' END)))
+             FROM commit_claims m WHERE m."commit" = k.id) AS claims
+     FROM change_commit cc JOIN commits k ON k.id = cc."commit"
+     ORDER BY cc.rowid`,
+    json: ['claims'],
+  }).rows;
 
   const changeRows = changes.map((c) => {
     const hs = hunkRows
@@ -1059,10 +1224,14 @@ export function briefParts(
   // changed lines share the sentence's rarer words. A commit listing several
   // changes doesn't say which file does what; this does, from the diff.
   const commitHunks = new Map<string, Record<string, unknown>[]>();
-  for (const r of g.run(
-    `MATCH (k:Commit)-[:INTRODUCED]->(h:Hunk)
+  for (const r of g.run({
+    cypher: `MATCH (k:Commit)-[:INTRODUCED]->(h:Hunk)
      RETURN k.id AS commit, h.id AS id, h.file AS file, h.touched AS symbols, h.words AS words`,
-  ).rows)
+    sql: `SELECT ck."commit" AS "commit", h.id AS id, h.file AS file, h.touched AS symbols, h.words AS words
+     FROM commit_hunk ck JOIN hunks h ON h.id = ck.hunk
+     JOIN commits k ON k.id = ck."commit"
+     ORDER BY k.rowid, ck.rowid DESC`,
+  }).rows)
     commitHunks.set(String(r.commit), [...(commitHunks.get(String(r.commit)) ?? []), r]);
   const implementedBy = (commit: string, text: unknown): string[] =>
     describedHunks(commitHunks.get(commit) ?? [], String(text ?? ''));
@@ -1114,18 +1283,32 @@ export function briefParts(
   }
 
   const receipts = g
-    .run(
-      'MATCH (v:Receipt) RETURN v.id AS id, v.kind AS kind, v.outcome AS outcome, v.summary AS summary, v.when AS when, v.cmd AS cmd',
-    )
+    .run({
+      cypher:
+        'MATCH (v:Receipt) RETURN v.id AS id, v.kind AS kind, v.outcome AS outcome, v.summary AS summary, v.when AS when, v.cmd AS cmd',
+      sql: `SELECT id, kind, outcome, summary, "when", cmd FROM receipts ORDER BY rowid`,
+    })
     .rows.sort((a, b) => factOrder(String(a.id), String(b.id)));
   const runs = g
     .run(
-      `MATCH (r:Run)-[:IN_SESSION]->(:Session {band: 'included'})
+      {
+        cypher: `MATCH (r:Run)-[:IN_SESSION]->(:Session {band: 'included'})
        WHERE r.kind IN $kinds
        OPTIONAL MATCH (r)-[:LATER_EDIT]->(f:File)
        RETURN r.id AS id, r.kind AS kind, r.outcome AS outcome, r.summary AS summary,
               r.when AS when, r.cmd AS cmd, r.t AS t, r.revision AS revision,
               collect(DISTINCT f.id) AS later`,
+        sql: `SELECT r.id AS id, r.kind AS kind, r.outcome AS outcome, r.summary AS summary,
+              r."when" AS "when", r.cmd AS cmd, r.t AS t, r.revision AS revision,
+              json_group_array(DISTINCT rl.file) FILTER (WHERE rl.file IS NOT NULL) AS later
+       FROM runs r
+       JOIN sessions s ON s.id = r.session AND s.band = 'included'
+       LEFT JOIN run_later_edit rl ON rl.run = r.id
+       WHERE r.kind IN (SELECT value FROM json_each($kinds))
+       GROUP BY r.id
+       ORDER BY r.rowid`,
+        json: ['later'],
+      },
       { kinds: CHECK_KINDS },
     )
     .rows.filter((r) => r.revision !== 'after later work')
@@ -1134,7 +1317,13 @@ export function briefParts(
   // checked other work (a pass there "is not a run for this branch").
   const runSession = new Map(
     g
-      .run('MATCH (r:Run)-[:IN_SESSION]->(s:Session) RETURN r.id AS id, s.id AS session')
+      .run({
+        cypher:
+          'MATCH (r:Run)-[:IN_SESSION]->(s:Session) RETURN r.id AS id, s.id AS session',
+        sql: `SELECT r.id AS id, s.id AS session
+     FROM runs r JOIN in_session rs ON rs.kind = 'Run' AND rs.id = r.id JOIN sessions s ON s.id = rs.session
+     ORDER BY r.rowid`,
+      })
       .rows.map((r) => [String(r.id), String(r.session)]),
   );
   const scopedRuns = runs.filter((r) => {
@@ -1196,9 +1385,11 @@ export function briefParts(
   }));
 
   for (const m of g
-    .run(
-      'MATCH (m:CommitClaim {assertsResult: true}) RETURN m.id AS id, m.commit AS commit, m.text AS text',
-    )
+    .run({
+      cypher:
+        'MATCH (m:CommitClaim {assertsResult: true}) RETURN m.id AS id, m.commit AS commit, m.text AS text',
+      sql: `SELECT id, "commit", text FROM commit_claims WHERE "assertsResult" = 1 ORDER BY rowid`,
+    })
     .rows.sort((a, b) => String(a.id).localeCompare(String(b.id))))
     validation.push({
       check: m.id,
@@ -1214,9 +1405,11 @@ export function briefParts(
   const checks = new Map(checksAfterLastEdit(g).map((c) => [c.file, c]));
   // A file no captured edit explains still has a last-change time: its commits'.
   const committed = new Map<string, string>();
-  for (const r of g.run(
-    `MATCH (k:Commit)-[:TOUCHES]->(f:File) WHERE k.t IS NOT NULL RETURN f.id AS file, max(k.t) AS t`,
-  ).rows)
+  for (const r of g.run({
+    cypher: `MATCH (k:Commit)-[:TOUCHES]->(f:File) WHERE k.t IS NOT NULL RETURN f.id AS file, max(k.t) AS t`,
+    sql: `SELECT cf.file AS file, max(k.t) AS t FROM commit_file cf
+     JOIN commits k ON k.id = cf."commit" WHERE k.t IS NOT NULL GROUP BY cf.file`,
+  }).rows)
     committed.set(String(r.file), String(r.t));
   const passedAfter = (t: string) =>
     runs
@@ -1269,9 +1462,11 @@ export function briefParts(
 
   // Open points a reviewer should hear about, each worth a sentence in the PR.
   for (const m of g
-    .run(
-      'MATCH (m:CommitClaim {assertsResult: true}) RETURN m.id AS id, m.commit AS commit, m.text AS text',
-    )
+    .run({
+      cypher:
+        'MATCH (m:CommitClaim {assertsResult: true}) RETURN m.id AS id, m.commit AS commit, m.text AS text',
+      sql: `SELECT id, "commit", text FROM commit_claims WHERE "assertsResult" = 1 ORDER BY rowid`,
+    })
     .rows.sort((a, b) => String(a.id).localeCompare(String(b.id))))
     limits.push({
       change: null,
@@ -1445,14 +1640,18 @@ const MAX_HEAD_ROWS = 3;
  * most referenced elsewhere, the top one marked as a place to start.
  */
 export function headScanRows(
-  g: GraphEngine,
+  g: EvidenceDb,
   hunkChange: Map<string, string>,
 ): Record<string, unknown>[] {
   const refs = g
-    .run(
-      `MATCH (x:HeadRef) RETURN x.id AS id, x.kind AS kind, x.term AS term, x.termKind AS termKind,
+    .run({
+      cypher: `MATCH (x:HeadRef) RETURN x.id AS id, x.kind AS kind, x.term AS term, x.termKind AS termKind,
               x.hunk AS hunk, x.refs AS refs, x.count AS count, x.files AS files, x.fresh AS fresh`,
-    )
+      sql: `SELECT id, kind, term, "termKind", hunk, refs, "count", files, fresh
+       FROM head_refs ORDER BY rowid`,
+      json: ['refs'],
+      bool: ['fresh'],
+    })
     .rows.sort((a, b) => factOrder(String(a.id), String(b.id)));
   const out: Record<string, unknown>[] = [];
   const more = (n: number, shown: number) => (n > shown ? ` and ${n - shown} more` : '');
@@ -1491,7 +1690,7 @@ const byNum = (a: string, b: string) =>
  * point to it (hunk level, as conservative as implementedBy).
  */
 function hunkRowsFor(
-  g: GraphEngine,
+  g: EvidenceDb,
   changeRows: { change: unknown }[],
   hunkRows: Record<string, unknown>[],
   hunkLinks: Record<string, string[]>,
@@ -1505,11 +1704,20 @@ function hunkRowsFor(
     string,
     { lines: number; edits: Set<string>; prompts: Set<string> }
   >();
-  for (const r of g.run(
-    `MATCH (h:Hunk)<-[s:SURVIVES_IN]-(e:Edit)-[:IN_SESSION]->(:Session {band: 'included'})
+  for (const r of g.run({
+    cypher: `MATCH (h:Hunk)<-[s:SURVIVES_IN]-(e:Edit)-[:IN_SESSION]->(:Session {band: 'included'})
      OPTIONAL MATCH (e)-[:IN_TURN]->(p:Prompt)
      RETURN h.id AS hunk, e.id AS edit, s.lines AS lines, p.id AS prompt`,
-  ).rows) {
+    sql: `SELECT h.id AS hunk, e.id AS edit, eh.lines AS lines, p.id AS prompt
+     FROM edit_hunk eh
+     JOIN hunks h ON h.id = eh.hunk
+     JOIN edits e ON e.id = eh.edit
+     JOIN in_session es ON es.kind = 'Edit' AND es.id = e.id
+     JOIN sessions s ON s.id = es.session AND s.band = 'included'
+     LEFT JOIN in_turn it ON it.kind = 'Edit' AND it.id = e.id
+     LEFT JOIN prompts p ON p.id = it.prompt
+     ORDER BY h.rowid, eh.rowid DESC`,
+  }).rows) {
     const x = survival.get(String(r.hunk)) ?? {
       lines: 0,
       edits: new Set<string>(),
@@ -1525,9 +1733,11 @@ function hunkRowsFor(
   }
   const info = new Map(
     g
-      .run(
-        'MATCH (h:Hunk) RETURN h.id AS id, h.start AS start, h.end AS end, h.code AS code',
-      )
+      .run({
+        cypher:
+          'MATCH (h:Hunk) RETURN h.id AS id, h.start AS start, h.end AS end, h.code AS code',
+        sql: `SELECT id, start, "end", code FROM hunks ORDER BY rowid`,
+      })
       .rows.map((r) => [String(r.id), r]),
   );
   const out: Record<string, unknown>[] = [];
@@ -1566,38 +1776,63 @@ export const QUERIES: NamedQuery[] = [
   {
     name: 'schema',
     args: '',
-    help: 'Node labels, relationships and properties, for writing your own --cypher.',
-    run: () => [
-      section(
-        'nodes',
-        ['label', 'properties'],
-        Object.entries(SCHEMA_DOC.nodes).map(([label, properties]) => ({
-          label,
-          properties,
-        })),
-      ),
-      section(
-        'relationships',
-        ['type', 'pattern'],
-        Object.entries(SCHEMA_DOC.relationships).map(([type, pattern]) => ({
-          type,
-          pattern,
-        })),
-      ),
-      section(
-        'notes',
-        ['note'],
-        SCHEMA_DOC.notes.map((note) => ({ note })),
-      ),
-    ],
+    help: 'Tables, link tables and columns, for writing your own --sql.',
+    run: () =>
+      evidenceEngine() === 'graph'
+        ? [
+            section(
+              'nodes',
+              ['label', 'properties'],
+              Object.entries(SCHEMA_DOC.nodes).map(([label, properties]) => ({
+                label,
+                properties,
+              })),
+            ),
+            section(
+              'relationships',
+              ['type', 'pattern'],
+              Object.entries(SCHEMA_DOC.relationships).map(([type, pattern]) => ({
+                type,
+                pattern,
+              })),
+            ),
+            section(
+              'notes',
+              ['note'],
+              SCHEMA_DOC.notes.map((note) => ({ note })),
+            ),
+          ]
+        : [
+            section(
+              'tables',
+              ['table', 'columns'],
+              Object.entries(SQL_SCHEMA_DOC.tables).map(([table, columns]) => ({
+                table,
+                columns,
+              })),
+            ),
+            section(
+              'links',
+              ['table', 'columns'],
+              Object.entries(SQL_SCHEMA_DOC.links).map(([table, columns]) => ({
+                table,
+                columns,
+              })),
+            ),
+            section(
+              'notes',
+              ['note'],
+              SQL_SCHEMA_DOC.notes.map((note) => ({ note })),
+            ),
+          ],
   },
   {
     name: 'outline',
     args: '',
     help: 'Every changed file: role, size, hunks, the prompts whose edits survive in it, the commits that touched it, and checks run after its last edit; then every commit, marking those with a message body to expand.',
     run: (g) => {
-      const rows = g.run(
-        `MATCH (f:File {inPr: true})
+      const rows = g.run({
+        cypher: `MATCH (f:File {inPr: true})
          OPTIONAL MATCH (h:Hunk)-[:OF]->(f)
          WITH f, count(h) AS hunks
          OPTIONAL MATCH (f)<-[:EDITS]-(e:Edit)-[:IN_TURN]->(p:Prompt)
@@ -1606,7 +1841,17 @@ export const QUERIES: NamedQuery[] = [
          OPTIONAL MATCH (c:Commit)-[:TOUCHES]->(f)
          RETURN f.id AS file, f.role AS role, f.added AS added, f.removed AS removed, f.unmatched AS unmatched,
                 hunks, prompts, collect(DISTINCT c.id) AS commits`,
-      ).rows;
+        sql: `SELECT f.id AS file, f.role AS role, f.added AS added, f.removed AS removed, f.unmatched AS unmatched,
+                (SELECT count(*) FROM hunks h WHERE h.file = f.id) AS hunks,
+                (SELECT json_group_array(DISTINCT it.prompt) FROM edits e
+                   JOIN in_turn it ON it.kind = 'Edit' AND it.id = e.id
+                   JOIN sessions s ON s.id = e.session AND s.band = 'included'
+                  WHERE e.file = f.id AND e.surviving > 0) AS prompts,
+                (SELECT json_group_array(DISTINCT cf."commit") FROM commit_file cf
+                  WHERE cf.file = f.id) AS commits
+         FROM files f WHERE f."inPr" = 1 ORDER BY f.rowid`,
+        json: ['prompts', 'commits'],
+      }).rows;
       const checks = new Map(checksAfterLastEdit(g).map((c) => [c.file, c]));
 
       const rank = (role: unknown) => ({ behavior: 0, tests: 1 })[String(role)] ?? 2;
@@ -1649,9 +1894,11 @@ export const QUERIES: NamedQuery[] = [
           'commits',
           ['commit', 'subject', 'hasBody'],
           g
-            .run(
-              'MATCH (c:Commit) RETURN c.id AS commit, c.subject AS subject, c.body AS body',
-            )
+            .run({
+              cypher:
+                'MATCH (c:Commit) RETURN c.id AS commit, c.subject AS subject, c.body AS body',
+              sql: `SELECT id AS "commit", subject, body FROM commits ORDER BY rowid`,
+            })
             .rows.sort((a, b) => String(a.commit).localeCompare(String(b.commit)))
             .map((r) => ({
               ...r,
@@ -1670,7 +1917,13 @@ export const QUERIES: NamedQuery[] = [
       const file =
         t.file ??
         String(
-          g.run('MATCH (h:Hunk {id: $id}) RETURN h.file AS f', { id: t.hunk }).rows[0]?.f,
+          g.run(
+            {
+              cypher: 'MATCH (h:Hunk {id: $id}) RETURN h.file AS f',
+              sql: `SELECT file AS f FROM hunks WHERE id = $id`,
+            },
+            { id: t.hunk },
+          ).rows[0]?.f,
         );
       const out = [turnsInto(g, t)];
       // Every hunk of the target, not only those a captured edit explains: an
@@ -1681,12 +1934,25 @@ export const QUERIES: NamedQuery[] = [
           ['hunk', 'diff', 'added', 'removed', 'prompts', 'explained'],
           g
             .run(
-              `MATCH (h:Hunk)-[:OF]->(:File {id: $file})
+              {
+                cypher: `MATCH (h:Hunk)-[:OF]->(:File {id: $file})
                ${t.hunk ? 'WHERE h.id = $hunk' : ''}
                OPTIONAL MATCH (h)<-[:SURVIVES_IN]-(e:Edit)-[:IN_SESSION]->(:Session {band: 'included'})
                OPTIONAL MATCH (e)-[:IN_TURN]->(p:Prompt)
                RETURN h.id AS hunk, h.diff AS diff, h.added AS added, h.removed AS removed,
                       collect(DISTINCT p.id) AS prompts, count(e) AS edits`,
+                sql: `SELECT h.id AS hunk, h.diff AS diff, h.added AS added, h.removed AS removed,
+                      json_group_array(DISTINCT it.prompt) FILTER (WHERE it.prompt IS NOT NULL) AS prompts,
+                      count(e.id) AS edits
+               FROM hunks h
+               LEFT JOIN (SELECT eh.hunk, e.id FROM edit_hunk eh
+                          JOIN edits e ON e.id = eh.edit
+                          JOIN sessions s ON s.id = e.session AND s.band = 'included') e ON e.hunk = h.id
+               LEFT JOIN in_turn it ON it.kind = 'Edit' AND it.id = e.id
+               WHERE h.file = $file ${t.hunk ? 'AND h.id = $hunk' : ''}
+               GROUP BY h.id ORDER BY h.rowid`,
+                json: ['prompts'],
+              },
               { file, hunk: t.hunk ?? null },
             )
             .rows.map((r): Record<string, unknown> => ({
@@ -1706,9 +1972,15 @@ export const QUERIES: NamedQuery[] = [
           ['commit', 'subject', 'madeInSession', 'body'],
           g
             .run(
-              `MATCH (c:Commit)-[:TOUCHES]->(:File {id: $file})
+              {
+                cypher: `MATCH (c:Commit)-[:TOUCHES]->(:File {id: $file})
                OPTIONAL MATCH (s:Session)-[:MADE]->(c)
                RETURN c.id AS commit, c.subject AS subject, s.id AS madeInSession, c.body AS body`,
+                sql: `SELECT c.id AS "commit", c.subject AS subject, sc.session AS madeInSession, c.body AS body
+               FROM commit_file cf JOIN commits c ON c.id = cf."commit"
+               LEFT JOIN session_commit sc ON sc."commit" = c.id
+               WHERE cf.file = $file ORDER BY cf.rowid DESC, sc.rowid DESC`,
+              },
               { file },
             )
             .rows.sort((a, b) => String(a.commit).localeCompare(String(b.commit))),
@@ -1803,14 +2075,29 @@ export const QUERIES: NamedQuery[] = [
     run: (g, [id]) => {
       if (!id || !/^S\d+$/.test(id)) throw new GraphError('Give a prompt id such as S3.');
       const p = g.run(
-        'MATCH (p:Prompt {id: $id}) RETURN p.text AS text, p.pushback AS pushback, p.t AS t',
+        {
+          cypher:
+            'MATCH (p:Prompt {id: $id}) RETURN p.text AS text, p.pushback AS pushback, p.t AS t',
+          sql: `SELECT text, pushback, t FROM prompts WHERE id = $id`,
+        },
         { id },
       ).rows[0];
       if (!p) throw new GraphError(`No prompt ${id} in this run's evidence graph.`);
       const edits = g.run(
-        `MATCH (e:Edit)-[:IN_TURN]->(:Prompt {id: $id})
+        {
+          cypher: `MATCH (e:Edit)-[:IN_TURN]->(:Prompt {id: $id})
          OPTIONAL MATCH (e)-[:SURVIVES_IN]->(h:Hunk)
          RETURN e.file AS file, e.id AS edit, e.surviving AS surviving, collect(h.diff) AS diffs`,
+          sql: `SELECT e.file AS file, e.id AS edit, e.surviving AS surviving,
+                json_group_array(h.diff) FILTER (WHERE h.diff IS NOT NULL) AS diffs
+         FROM in_turn it
+         JOIN edits e ON e.id = it.id
+         LEFT JOIN edit_hunk eh ON eh.edit = e.id
+         LEFT JOIN hunks h ON h.id = eh.hunk
+         WHERE it.kind = 'Edit' AND it.prompt = $id
+         GROUP BY e.id ORDER BY it.rowid`,
+          json: ['diffs'],
+        },
         { id },
       ).rows;
       const files = new Map<
@@ -1838,8 +2125,17 @@ export const QUERIES: NamedQuery[] = [
         files.set(f.file, f);
       }
       const facts = g.run(
-        `MATCH (x)-[:IN_TURN]->(:Prompt {id: $id}) WHERE x:Decision OR x:Plan OR x:Run
+        {
+          cypher: `MATCH (x)-[:IN_TURN]->(:Prompt {id: $id}) WHERE x:Decision OR x:Plan OR x:Run
          RETURN x.id AS id, labels(x)[0] AS kind, coalesce(x.text, x.cmd) AS text, x.outcome AS outcome`,
+          sql: `SELECT x.id AS id, x.kind AS kind, x.text AS text, NULL AS outcome
+         FROM in_turn it JOIN facts x ON x.kind = it.kind AND x.id = it.id
+         WHERE it.prompt = $id
+         UNION ALL
+         SELECT r.id, 'Run', r.cmd, r.outcome
+         FROM in_turn it JOIN runs r ON it.kind = 'Run' AND r.id = it.id
+         WHERE it.prompt = $id`,
+        },
         { id },
       ).rows;
       return [
@@ -1870,12 +2166,20 @@ export const QUERIES: NamedQuery[] = [
     run: (g, [id]) => {
       if (!id || !/^R\d+$/.test(id)) throw new GraphError('Give a run id such as R2.');
       const r = g.run(
-        'MATCH (r:Run {id: $id}) RETURN r.cmd AS cmd, r.outcome AS outcome, r.revision AS revision, r.t AS t',
+        {
+          cypher:
+            'MATCH (r:Run {id: $id}) RETURN r.cmd AS cmd, r.outcome AS outcome, r.revision AS revision, r.t AS t',
+          sql: `SELECT cmd, outcome, revision, t FROM runs WHERE id = $id`,
+        },
         { id },
       ).rows[0];
       if (!r) throw new GraphError(`No run ${id} in this run's evidence graph.`);
       const files = g.run(
-        'MATCH (:Run {id: $id})-[:LATER_EDIT]->(f:File) RETURN f.id AS file, f.role AS role',
+        {
+          cypher:
+            'MATCH (:Run {id: $id})-[:LATER_EDIT]->(f:File) RETURN f.id AS file, f.role AS role',
+          sql: `SELECT f.id AS file, f.role AS role FROM run_later_edit rl JOIN files f ON f.id = rl.file WHERE rl.run = $id ORDER BY rl.rowid`,
+        },
         { id },
       ).rows;
       return [
@@ -1897,11 +2201,15 @@ export const QUERIES: NamedQuery[] = [
         'edits',
         ['file', 'prompt', 'edits', 'linesAdded'],
         g
-          .run(
-            `MATCH (e:Edit) WHERE e.surviving = 0 AND e.added > 0
+          .run({
+            cypher: `MATCH (e:Edit) WHERE e.surviving = 0 AND e.added > 0
              OPTIONAL MATCH (e)-[:IN_TURN]->(p:Prompt)
              RETURN e.file AS file, p.id AS prompt, count(e) AS edits, sum(e.added) AS linesAdded`,
-          )
+            sql: `SELECT e.file AS file, it.prompt AS prompt, count(e.id) AS edits, sum(e.added) AS linesAdded
+             FROM edits e LEFT JOIN in_turn it ON it.kind = 'Edit' AND it.id = e.id
+             WHERE e.surviving = 0 AND e.added > 0
+             GROUP BY e.file, it.prompt`,
+          })
           .rows.sort(
             (a, b) =>
               String(a.file).localeCompare(String(b.file)) ||
@@ -1915,12 +2223,19 @@ export const QUERIES: NamedQuery[] = [
     args: '',
     help: 'Prompts typed while rejecting the agent’s action, with the files edited in that turn and the next prompt.',
     run: (g) => {
-      const rows = g.run(
-        `MATCH (p:Prompt {pushback: true})
+      const rows = g.run({
+        cypher: `MATCH (p:Prompt {pushback: true})
          OPTIONAL MATCH (e:Edit)-[:IN_TURN]->(p)
          OPTIONAL MATCH (p)-[:NEXT]->(n:Prompt)
          RETURN p.id AS prompt, p.text AS text, collect(DISTINCT e.file) AS files, n.id AS next`,
-      ).rows;
+        sql: `SELECT p.id AS prompt, p.text AS text,
+                (SELECT json_group_array(DISTINCT e.file) FROM in_turn it JOIN edits e ON e.id = it.id
+                  WHERE it.kind = 'Edit' AND it.prompt = p.id) AS files,
+                pn.next AS next
+         FROM prompts p LEFT JOIN prompt_next pn ON pn.prompt = p.id
+         WHERE p.pushback = 1 ORDER BY p.rowid`,
+        json: ['files'],
+      }).rows;
       return [
         section(
           'prompts',
@@ -1943,10 +2258,14 @@ export function findQuery(name: string): NamedQuery | undefined {
 
 /** A raw read query from an agent. The database is in memory and per command, but keep it read-only. */
 export function rawQuery(
-  g: GraphEngine,
+  g: EvidenceDb,
   cypher: string,
   params: Record<string, unknown> = {},
 ): Section[] {
+  if (g.dialect !== 'cypher')
+    throw new GraphError(
+      'This run\'s evidence is in SQLite: use --sql "SELECT ..." (see `query schema`).',
+    );
   if (
     /\b(CREATE|MERGE|SET|DELETE|DETACH|REMOVE|DROP|LOAD\s+CSV)\b/i.test(
       cypher.replace(/'[^']*'|"[^"]*"/g, "''"),
@@ -1955,4 +2274,27 @@ export function rawQuery(
     throw new GraphError('Only read queries are allowed (MATCH … RETURN).');
   const r = g.run(cypher, params);
   return [section('rows', r.columns, r.rows)];
+}
+
+/**
+ * A raw SQL query from an agent. The database is opened with query_only, so
+ * SQLite itself refuses writes; one statement per call.
+ */
+export function rawSql(
+  g: EvidenceDb,
+  sql: string,
+  params: Record<string, unknown> = {},
+): Section[] {
+  if (g.dialect !== 'sql')
+    throw new GraphError(
+      '--sql needs the SQLite evidence store (TRACETOON_EVIDENCE_ENGINE=sqlite).',
+    );
+  try {
+    const r = g.run({ cypher: '', sql }, params);
+    return [section('rows', r.columns, r.rows)];
+  } catch (e) {
+    if (/readonly|read-only|query_only/i.test((e as Error).message))
+      throw new GraphError('Only read queries are allowed (SELECT …).');
+    throw e;
+  }
 }

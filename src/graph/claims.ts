@@ -4,7 +4,7 @@
  * finding names the evidence so the writer can qualify the sentence.
  */
 import type { ClaimFinding } from '../digest/claims.ts';
-import { withGraph } from './engine.ts';
+import { withEvidence } from './store.ts';
 import type { EvidenceGraph } from './model.ts';
 
 export interface GraphClaimFacts {
@@ -18,11 +18,13 @@ export interface GraphClaimFacts {
 
 export function graphClaimFacts(graph: EvidenceGraph): GraphClaimFacts | undefined {
   try {
-    return withGraph(graph, (g) => ({
+    return withEvidence(graph, (g) => ({
       commitClaims: g
-        .run(
-          'MATCH (m:CommitClaim) RETURN m.id AS id, m.commit AS commit, m.text AS text, m.assertsResult AS assertsResult',
-        )
+        .run({
+          cypher:
+            'MATCH (m:CommitClaim) RETURN m.id AS id, m.commit AS commit, m.text AS text, m.assertsResult AS assertsResult',
+          sql: `SELECT id, "commit", text, "assertsResult" FROM commit_claims ORDER BY rowid`,
+        })
         .rows.map((r) => ({
           id: String(r.id),
           commit: String(r.commit),
@@ -30,13 +32,18 @@ export function graphClaimFacts(graph: EvidenceGraph): GraphClaimFacts | undefin
           assertsResult: !!r.assertsResult,
         })),
       commits: g
-        .run('MATCH (k:Commit)-[:INTRODUCED]->(:Hunk) RETURN DISTINCT k.id AS id')
+        .run({
+          cypher: 'MATCH (k:Commit)-[:INTRODUCED]->(:Hunk) RETURN DISTINCT k.id AS id',
+          sql: `SELECT DISTINCT "commit" AS id FROM commit_hunk`,
+        })
         .rows.map((r) => String(r.id))
         .sort(),
       runResults: g
-        .run(
-          'MATCH (r) WHERE r:Run OR r:Receipt RETURN r.summary AS summary, r.cmd AS cmd',
-        )
+        .run({
+          cypher:
+            'MATCH (r) WHERE r:Run OR r:Receipt RETURN r.summary AS summary, r.cmd AS cmd',
+          sql: `SELECT summary, cmd FROM runs UNION ALL SELECT summary, cmd FROM receipts`,
+        })
         .rows.flatMap((r) => [...((r.summary as string[]) ?? []), String(r.cmd ?? '')]),
     }));
   } catch {

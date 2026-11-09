@@ -933,6 +933,7 @@ describe('evidence graph', () => {
     const env = {
       ...process.env,
       TRACETOON_CYPHERLITE_WASM: join(tempDir(), 'missing.wasm'),
+      TRACETOON_EVIDENCE_ENGINE: 'graph',
     };
     const r = spawnSync(
       PROGRAM[0]!,

@@ -11,15 +11,12 @@ import { CypherliteDb, initSync } from './vendor/cypherlite.js';
 import { assetsDir } from '../util/assets.ts';
 import { measured } from '../util/profile.ts';
 import type { EvidenceGraph, NodeLabel, Value } from './model.ts';
+import { GraphError, type EvidenceDb, type Q, type QueryResult } from './db.ts';
 
 export const WASM_FILE = 'cypherlite.wasm';
 
-export class GraphError extends Error {}
-
-export interface QueryResult {
-  columns: string[];
-  rows: Record<string, unknown>[];
-}
+export { GraphError } from './db.ts';
+export type { EvidenceDb, Q, QueryResult } from './db.ts';
 
 interface Envelope {
   columns?: string[];
@@ -65,7 +62,8 @@ const BATCH = 500;
 const LABEL = /^[A-Z][A-Za-z]*$/;
 
 /** One in-memory database holding one evidence graph. */
-export class GraphEngine {
+export class GraphEngine implements EvidenceDb {
+  readonly dialect = 'cypher' as const;
   private db: CypherliteDb;
   private dead?: GraphError;
 
@@ -121,8 +119,9 @@ export class GraphEngine {
   }
 
   /** Run one statement. Errors carry the engine's own message. */
-  run(cypher: string, params?: Record<string, unknown>): QueryResult {
+  run(q: Q, params?: Record<string, unknown>): QueryResult {
     if (this.dead) throw this.dead;
+    const cypher = typeof q === 'string' ? q : q.cypher;
     let raw: string;
     try {
       raw = this.db.execute(cypher, params ? JSON.stringify(params) : null);

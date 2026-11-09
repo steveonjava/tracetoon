@@ -17,7 +17,8 @@ import { buildEvidenceGraph } from './build.ts';
 import { addHeadScan } from './headScan.ts';
 import { annotateDigest, deriveFromGraphJson, type GraphDerived } from './derive.ts';
 import type { EvidenceGraph } from './model.ts';
-import { withGraph } from './engine.ts';
+import { evidenceEngine, withEvidence } from './store.ts';
+import { SqlEngine } from '../sql/engine.ts';
 import { briefParts, findQuery } from './queries.ts';
 import type { BriefParts } from './briefRender.ts';
 import { toToon } from './toon.ts';
@@ -26,6 +27,8 @@ import { briefBudget, isNeighborhood, type BriefLayout } from './layout.ts';
 
 export const GRAPH_FILE = 'evidence-graph.json';
 export const GRAPH_REVIEW_FILE = 'graph-review.json';
+/** The same evidence as SQLite tables, for any SQLite client (`sqlite3 evidence.sqlite`). */
+export const SQL_FILE = 'evidence.sqlite';
 
 export interface GraphOutcome {
   graph?: EvidenceGraph;
@@ -149,11 +152,22 @@ export function graphEnricher(
 }
 
 export function saveGraph(run: Run, outcome: GraphOutcome): void {
-  for (const f of [GRAPH_FILE, GRAPH_REVIEW_FILE])
+  for (const f of [GRAPH_FILE, GRAPH_REVIEW_FILE, SQL_FILE])
     if (existsSync(join(run.dir, f))) unlinkSync(join(run.dir, f));
   if (!outcome.graph || !outcome.derived) return;
   writeJson(run, GRAPH_FILE, outcome.graph);
   writeJson(run, GRAPH_REVIEW_FILE, outcome.derived.review);
+  if (evidenceEngine() === 'sqlite')
+    try {
+      const db = SqlEngine.load(outcome.graph);
+      try {
+        db.exportTo(join(run.dir, SQL_FILE));
+      } finally {
+        db.close();
+      }
+    } catch {
+      /* the JSON is the record; the database file is a convenience */
+    }
 }
 
 export function loadGraph(run: Run): EvidenceGraph | undefined {
@@ -176,7 +190,7 @@ export function graphBriefParts(
   layout: BriefLayout = 'toon',
 ): (BriefParts & { hunkLinks: Record<string, string[]> }) | undefined {
   try {
-    return withGraph(graph, (g) => briefParts(g, { layout }));
+    return withEvidence(graph, (g) => briefParts(g, { layout }));
   } catch {
     return undefined;
   }
@@ -189,7 +203,7 @@ export function graphBrief(
   const rowCap = opts.rowCap ?? 60;
   try {
     if (isNeighborhood(opts.layout))
-      return withGraph(graph, (g) => {
+      return withEvidence(graph, (g) => {
         const { sections } = briefParts(g, { layout: 'neighborhood' });
         const budget = briefBudget(opts.layout);
         // As long as the TOON brief of the same run, so the layouts compare at equal size.
@@ -201,7 +215,7 @@ export function graphBrief(
           : undefined;
         return renderNeighborhood(sections, { budgetTokens: budget.tokens, targetChars });
       }).trimEnd();
-    const sections = withGraph(graph, (g) => findQuery('brief')!.run(g, []));
+    const sections = withEvidence(graph, (g) => findQuery('brief')!.run(g, []));
     return toToon(sections, { rowCap }).trimEnd();
   } catch {
     return undefined;
