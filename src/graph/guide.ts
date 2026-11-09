@@ -116,10 +116,11 @@ export function guideRows(input: GuideInput): Row[] {
   const top = scored[0];
   if (top) {
     const why: string[] = [];
-    if (top.s?.lines) {
-      const [req] = [...top.s.by].sort((a, b) => b[1] - a[1])[0] ?? [];
-      why.push(`${top.s.lines} surviving edit line(s)${req ? ` from ${req}` : ''}`);
-    }
+    // The amount of requested work only, never which request: a prompt whose edits
+    // land here is not necessarily why the change was made (judges counted that as
+    // inviting "the user asked for…").
+    if (top.s?.lines)
+      why.push(`${top.s.lines} surviving edit line(s) from this PR's requests`);
     if (told.get(top.id)) why.push(`${told.get(top.id)} commit sentence(s) describe it`);
     if (list(top.h.fresh).length)
       why.push(`defines ${list(top.h.fresh).slice(0, 2).join(', ')}`);
@@ -130,7 +131,7 @@ export function guideRows(input: GuideInput): Row[] {
     out.push({
       kind: 'start here',
       text: `${str(top.h.file)}${sym ? ` (${sym})` : ''}: ${why.join('; ') || 'the main behavior change'}`,
-      cites: [str(top.h.change), ...(top.s ? [...top.s.by.keys()].slice(0, 1) : [])],
+      cites: [str(top.h.change)],
     });
   }
 
