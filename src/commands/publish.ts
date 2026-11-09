@@ -25,7 +25,7 @@ import {
   loadGraph,
   loadGraphReview,
 } from '../graph/evidence.ts';
-import { applyBrief, type BriefApplied } from '../graph/briefRender.ts';
+import { demoteRepeats, applyBrief, type BriefApplied } from '../graph/briefRender.ts';
 import {
   existsSync,
   readdirSync,
@@ -246,6 +246,7 @@ const briefCheckSummary = (b: BriefApplied) => ({
   unbackedNames: b.unbackedNames,
   uncovered: b.uncovered,
   flags: b.flags,
+  repeated: b.repeated ?? [],
   /** Sentences the writer must fix before publishing (coverage gaps are counted apart). */
   open: openProblems(b),
 });
@@ -308,6 +309,15 @@ function briefCheckLines(b: BriefApplied): string {
           '\n',
         )}${b.uncovered.length > 12 ? `\n  - …and ${b.uncovered.length - 12} more` : ''}`,
     );
+  if (b.repeated?.length)
+    out.push(
+      `Reported by an earlier render and no longer blocking (fix them if you can; don't loop on them):\n${b.repeated
+        .slice(0, 8)
+        .map((r) => `  - ${r}`)
+        .join(
+          '\n',
+        )}${b.repeated.length > 8 ? `\n  - …and ${b.repeated.length - 8} more` : ''}`,
+    );
   if (b.tags) {
     const open = openProblems(b);
     out.push(
@@ -355,6 +365,13 @@ export function renderCmd(cwd: string, opts: RenderOpts): Approval {
     bodyMd,
     storedGraph ? graphBriefParts(storedGraph) : undefined,
   );
+  {
+    const seen = demoteRepeats(
+      briefCheck,
+      readJson<string[]>(run, 'brief-findings-seen.json') ?? [],
+    );
+    writeJson(run, 'brief-findings-seen.json', seen);
+  }
   const draft = briefCheck.text;
   // The title: a person's choice is kept. A title edited on GitHub since
   // Tracetoon posted it, or written by someone on a PR Tracetoon didn't title,
