@@ -189,13 +189,13 @@ describe('relational review packet', () => {
       /#1 "Greets people by name\." → H1 greet\.ts \| covered by its code/,
     );
     expect(text).toContain(
-      '#2 "All 12 tests pass." (reports a result: not a recorded run) → nothing tied',
+      '#2 "All 12 tests pass." (reports a result: not a recorded run) → no chunk ranked for it (may be message-only; commit\'s own code: H1, H2, H3, H4)',
     );
     // chunk table: new names, branches, owning symbol, diff ranges
     const lines = patch.split('\n');
     const greetLines = greet.lines.map((l) => l.patchNo!);
     expect(text).toContain(
-      `${greet.id} L1-4 diff:${Math.min(...greetLines)}-${Math.max(...greetLines)} +4/−0 | new: greet | branches 1 | cited | shown`,
+      `${greet.id} L1-4 diff:${Math.min(...greetLines)}-${Math.max(...greetLines)} +4/−0 | new: greet | branches 1 | tagged | shown`,
     );
     expect(text).toMatch(
       new RegExp(`${limit.id} L2-3 diff:\\d+-\\d+ \\+2/−1 \\| in limit \\| branches 1`),
@@ -209,7 +209,7 @@ describe('relational review packet', () => {
     expect(text).toMatch(
       /files the body neither names nor cites: .*tests\/greet\.test\.ts/,
     );
-    // diff numbered by changes.patch lines; tests reduced to titles and assertions
+    // diff numbered by changes.patch lines; test files whole while everything fits
     const w = String(lines.length).length;
     const ifLine = lines.findIndex((l) => l.includes('if (!name)')) + 1;
     expect(text).toContain(`${String(ifLine).padStart(w)} +  if (!name) return 'hello';`);
@@ -218,7 +218,8 @@ describe('relational review packet', () => {
       `${String(ctxLine).padStart(w)}  export const unit = "minutes";`,
     );
     expect(text).toContain('expect(greet(name)).toBe("hello Ada");');
-    expect(text).not.toContain("const name = 'Ada'");
+    expect(text).toContain("const name = 'Ada'");
+    expect(text).not.toContain('test files reduced');
     expect(text).not.toContain('lockfileVersion');
     // the shared packet wraps it without the graph's sections
     const packet = leanPacket({
@@ -260,6 +261,7 @@ describe('relational review packet', () => {
     expect(text).toContain("if (!name) return 'hello';");
     expect(text).toContain('export const named = 1;');
     expect(text).toContain('expect(greet(name)).toBe("hello Ada");');
+    expect(text).not.toContain("const name = 'Ada'"); // tests reduced to assertions
     const { chunks } = chunkPatch(patch);
     const ids = (f: string) => chunks.filter((c) => c.file === f).map((c) => c.id);
     for (const id of [
@@ -270,6 +272,33 @@ describe('relational review packet', () => {
       expect(ev.shownHunks).toContain(id);
     // quiet.ts chunks add names, so some fit; the rest are still listed with diff ranges
     expect(text).toMatch(/H\d+ L\d+-\d+ diff:\d+-\d+/);
+  });
+
+  test('selected mode shows the branching lines of untagged chunks with one line around them', () => {
+    const filler = Array.from(
+      { length: 500 },
+      (_, i) => `export const value${i} = ${i}; // padding text`,
+    );
+    const ifs = Array.from({ length: 30 }, (_, i) => [
+      `  const v${i} = load(${i});`,
+      `  if (v${i} > 3) stop(${i});`,
+    ]).flat();
+    const big = section('src/branchy.ts', 1, ['export function run() {', ...ifs, '}']);
+    const patch = [section('src/quiet.ts', 1, filler), big].join('\n') + '\n';
+    const ev = relationalPacket(
+      { run: { id: 'r6', dir: tempDir() }, title: 't', body: 'b', patch },
+      context(patch),
+    );
+    expect(ev.mode).toBe('selected');
+    const text = ev.lines.join('\n');
+    expect(text).toMatch(
+      /H\d+ L1-\d+ diff:\d+-\d+ \+62\/−0 \| new: run \| branches 30 \| branch lines shown/,
+    );
+    expect(text).toContain('if (v29 > 3) stop(29);');
+    const lines = patch.split('\n');
+    const n = lines.findIndex((l) => l.includes('if (v0 > 3)')) + 1;
+    const w = String(lines.length).length;
+    expect(text).toContain(`${String(n - 1).padStart(w)} +  const v0 = load(0);`);
   });
 
   test('stale links (a different patch) are ignored, not misattributed', () => {
@@ -286,10 +315,13 @@ describe('relational review packet', () => {
     expect(text).toContain(`commit:${SHA}#1 "Greets people by name."`);
   });
 
-  test('graph mode, or no relational context: no evidence (the graph packet applies)', () => {
+  test('relational mode always gets the relational packet; graph mode gets none', () => {
     const run = { id: 'r4', dir: tempDir() };
     const input = { run, title: 't', body: 'b', patch: branchy + '\n' };
-    expect(buildPacketEvidence(input)).toBeUndefined();
+    // No context file: still the relational packet, never the graph's.
+    const bare = buildPacketEvidence(input)!;
+    expect(bare.legend).toBe(LEGEND);
+    expect(bare.lines.join('\n')).toContain("if (!name) return 'hello';");
     writeFileSync(
       join(run.dir, 'relational-context.json'),
       JSON.stringify(context(branchy + '\n')),
@@ -297,6 +329,51 @@ describe('relational review packet', () => {
     expect(buildPacketEvidence(input)?.mode).toBe('whole');
     process.env.TRACETOON_EVIDENCE_MODE = 'graph';
     expect(buildPacketEvidence(input)).toBeUndefined();
+  });
+
+  test("a small commit's own code, open points and TODO lines", () => {
+    const todo = section('src/todo.ts', 1, [
+      '// TODO: handle negative limits',
+      'export const x = 1;',
+    ]);
+    const patch = [branchy, todo].join('\n') + '\n';
+    const { chunks } = chunkPatch(patch);
+    const ctx = context(patch, {
+      commits: [
+        { id: `commit:${SHA}`, subject: 'feat', chunks: chunks.map((c) => c.id) },
+      ],
+      sentences: [
+        { id: `commit:${SHA}#1`, text: 'Both now say hello.', result: false, chunks: [] },
+      ],
+      facts: [
+        {
+          id: 'S2',
+          kind: 'prompt',
+          labels: ['after the last commit'],
+          text: 'Also add a farewell later.',
+        },
+        {
+          id: 'P1',
+          kind: 'plan',
+          labels: ['plan, sent back'],
+          text: 'Rewrite everything.',
+        },
+      ],
+    });
+    const text = relationalPacket(
+      { run: { id: 'r5', dir: tempDir() }, title: 't', body: 'Says hello.', patch },
+      ctx,
+    ).lines.join('\n');
+    expect(text).toContain(
+      '#1 "Both now say hello." → no chunk ranked; commit\'s own code: H1 greet.ts, H2 todo.ts (check whether they do it)',
+    );
+    expect(text).not.toContain('only the message states');
+    expect(text).toContain(
+      '- open point, S2 (after the last commit), not cited: "Also add a farewell later."',
+    );
+    expect(text).toContain('- open point, P1 (plan, sent back), not cited');
+    const n = patch.split('\n').findIndex((l) => l.includes('TODO')) + 1;
+    expect(text).toContain(`- added TODO/FIXME/XXX/HACK lines (open work): diff:${n}`);
   });
 
   test('refs per body line follow body.md to the rendered body', () => {
@@ -326,6 +403,7 @@ describe('relational review packet', () => {
         { id: `commit:${SHA}#1`, text: 'a', result: false, chunks: ['H2'] },
         { id: `commit:${SHA}#2`, text: 'b', result: false, chunks: [] },
         { id: 'commit:999999999999#1', text: 'c', result: false, chunks: [] },
+        { id: `commit:${SHA}#3`, text: '12 tests pass.', result: true, chunks: [] },
       ],
       facts: [],
     };
@@ -430,7 +508,7 @@ describe('relational review packet, end to end', () => {
     );
     expect(text).toMatch(/body:\d+ ← S1, H1/);
     expect(text).toMatch(
-      /H1 L1-4 diff:\d+-\d+ \+4\/−0 \| new: greetByName \| branches 1 \| asked in S1 \| cited \| shown/,
+      /H1 L1-4 diff:\d+-\d+ \+4\/−0 \| new: greetByName \| branches 1 \| asked in S1 \| tagged \| shown/,
     );
     expect(text).not.toContain('Hunks and owning symbols');
     const patch = readFileSync(join(runDir, 'changes.patch'), 'utf8').split(/\r?\n/);

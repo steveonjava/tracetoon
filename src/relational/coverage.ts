@@ -10,8 +10,8 @@ export const SMALL_COMMIT_CHUNKS = 3;
 
 /**
  * Coverage rows `{ref, coveredBy}`: each sentence is covered by the chunks
- * hybrid search tied it to within its own commit; a sentence tied to none, in a
- * commit whose own lines are in at most three chunks, by those chunks. `rowRefs`
+ * hybrid search tied it to within its own commit; a sentence tied to none
+ * (and not reporting a result), in a commit whose own lines are in at most three chunks, by those chunks. `rowRefs`
  * are the refs render's commit rows use (a sentence's row may name its commit by
  * a shorter sha): a row keyed by one of them replaces the store's own id.
  */
@@ -33,7 +33,11 @@ export function sentenceCoverage(
   const out: { ref: string; coveredBy: string[] }[] = [];
   for (const s of links.sentences) {
     const own = commitChunks.get(s.id.split('#')[0]!) ?? [];
-    const by = s.chunks.length ? s.chunks : own.length <= SMALL_COMMIT_CHUNKS ? own : [];
+    const by = s.chunks.length
+      ? s.chunks
+      : !s.result && own.length <= SMALL_COMMIT_CHUNKS
+        ? own
+        : [];
     if (by.length) out.push({ ref: rowFor(s.id), coveredBy: [...by] });
   }
   return out;

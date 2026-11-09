@@ -28,8 +28,8 @@ import {
   type StoreLinks,
 } from '../relational/index.ts';
 import { chunkPatch, testTitle, type Chunk, type DiffFile } from '../relational/diff.ts';
-import { sentenceCoverage } from '../relational/coverage.ts';
-import { clip, oneLine } from '../relational/text.ts';
+import { sentenceCoverage, SMALL_COMMIT_CHUNKS } from '../relational/coverage.ts';
+import { clip } from '../relational/text.ts';
 
 export interface PacketEvidenceInput {
   run: Run;
@@ -44,7 +44,7 @@ export interface PacketEvidenceInput {
 /** The relational context file (src/graph/evidence.ts writes it; the name is fixed). */
 export const CONTEXT_FILE = 'relational-context.json';
 /** Longest diff line shown, in characters. */
-const LINE_MAX = 240;
+const LINE_MAX = 200;
 /** Context lines kept around a selected chunk's changed lines. */
 const AROUND = 3;
 
@@ -65,6 +65,10 @@ type Ch = Chunk & { fileId: string };
 const roleOf = (f: DiffFile) => (f.binary ? 'generated' : f.role);
 const skippedFile = (f: DiffFile) =>
   f.binary || f.role === 'generated' || f.role === 'version' || LOCKFILE.test(f.path);
+/** A changed line that only bumps a version field. */
+const VERSION_LINE = /^\s*"?version"?\s*[:=]\s*"?[\w.+-]+"?,?\s*$/;
+/** An added line that leaves work open. */
+const OPEN_MARK = /\b(TODO|FIXME|XXX|HACK)\b/;
 const norm = (s: string) =>
   s
     .replace(/[`*_]/g, '')
@@ -118,8 +122,12 @@ export function buildPacketEvidence(
   input: PacketEvidenceInput,
 ): PacketEvidence | undefined {
   if (!relationalVectorMode()) return undefined;
-  const ctx = readJson<RelationalContext>(input.run, CONTEXT_FILE);
-  if (!ctx) return undefined;
+  // A relational run always gets the relational packet, even without its context file.
+  const ctx = readJson<RelationalContext>(input.run, CONTEXT_FILE) ?? {
+    text: '',
+    refs: [],
+    tokens: 0,
+  };
   return relationalPacket(input, ctx);
 }
 
@@ -169,6 +177,7 @@ export function relationalPacket(
   // ---- Per-chunk facts -----------------------------------------------------
   const removedAnywhere = new Set(chunks.flatMap((c) => c.removedDefs));
   const fileOf = (c: Ch) => fileById.get(c.fileId)!;
+  const byIdMap = new Map(chunks.map((c) => [c.id, c]));
   const branchesOf = (c: Ch) => {
     const role = roleOf(fileOf(c));
     if (role === 'docs' || role === 'tests' || skippedFile(fileOf(c))) return 0;
@@ -180,28 +189,47 @@ export function relationalPacket(
     (links?.sentences ?? []).map((s) => [s.id, s.chunks] as const),
   );
   const coverage = links ? sentenceCoverage(links) : [];
-  const cited = new Set<string>();
+  // Tagged: the writer's tags cite it (or a cited commit sentence is tied to it).
+  // Named: the prose names its file or a name it defines.
+  const tagged = new Set<string>();
+  const namedChunk = new Set<string>();
   for (const c of chunks) {
-    const f = fileOf(c);
-    if (
-      tags.has(c.id) ||
-      tags.has(c.fileId) ||
-      named(f) ||
-      c.defined.some((d) => ticked.has(d))
-    )
-      cited.add(c.id);
+    if (tags.has(c.id) || tags.has(c.fileId)) tagged.add(c.id);
+    if (named(fileOf(c)) || c.defined.some((d) => ticked.has(d))) namedChunk.add(c.id);
   }
-  // A cited commit sentence points at the code it is tied to.
   for (const [sid, ids] of sentenceChunks)
-    if (citedKey(sid)) for (const id of ids) cited.add(id);
+    if (citedKey(sid)) for (const id of ids) tagged.add(id);
+  const cited = new Set([...tagged, ...namedChunk]);
+  // Version-only hunks (package.json, plugin.json) are one line in the table, no diff.
+  const versionOnly = (c: Ch) =>
+    c.lines.length > 0 && c.lines.every((l) => VERSION_LINE.test(l.text));
 
   // ---- Which patch lines each chunk shows ----------------------------------
   const hunkOf = (c: Ch) => fileOf(c).hunks[c.hunk]!;
-  const lineSet = (c: Ch): number[] => {
+  const isTest = (c: Ch) => roleOf(fileOf(c)) === 'tests';
+  /** The first `max` branching changed lines with one line around each, and the @@ line. */
+  const branchSet = (c: Ch, max = Infinity): number[] => {
+    const h = hunkOf(c);
+    const first = h.patchNo! + 1;
+    const last = h.lines.at(-1)?.patchNo ?? first;
+    const out = new Set([h.patchNo!]);
+    const hits = c.lines
+      .filter((l) => !COMMENT.test(l.text) && BRANCH.test(l.text))
+      .slice(0, max);
+    for (const l of hits)
+      for (
+        let n = Math.max(first, l.patchNo! - 1);
+        n <= Math.min(last, l.patchNo! + 1);
+        n++
+      )
+        out.add(n);
+    return [...out].sort((a, b) => a - b);
+  };
+  const lineSet = (c: Ch, reduceTests: boolean): number[] => {
     const f = fileOf(c);
     const h = hunkOf(c);
     const head = h.patchNo!;
-    if (roleOf(f) === 'tests') {
+    if (reduceTests && roleOf(f) === 'tests') {
       const keep = c.lines
         .filter(
           (l) =>
@@ -220,45 +248,69 @@ export function relationalPacket(
       out.push(n);
     return out;
   };
-  const shownLines = new Map<string, number[]>();
-  for (const c of chunks) if (!skippedFile(fileOf(c))) shownLines.set(c.id, lineSet(c));
   const charsOf = (ns: Iterable<number>) => {
     let n = 0;
     for (const x of ns) n += Math.min(LINE_MAX, (patchLines[x - 1] ?? '').length) + 1;
     return n;
   };
-  const allLines = new Set([...shownLines.values()].flat());
+  const diffable = chunks.filter((c) => !skippedFile(fileOf(c)) && !versionOnly(c));
+  const linesOf = (reduceTests: boolean) =>
+    new Map(diffable.map((c) => [c.id, lineSet(c, reduceTests)]));
+  // Whole with tests in full when it fits; else whole with tests reduced; else selected.
+  let shownLines = linesOf(false);
+  let allLines = new Set([...shownLines.values()].flat());
+  let testsReduced = false;
+  if (charsOf(allLines) > WHOLE_DIFF_CHARS) {
+    shownLines = linesOf(true);
+    allLines = new Set([...shownLines.values()].flat());
+    testsReduced = true;
+  }
   const totalChars = charsOf(allLines);
   const mode: PacketEvidence['mode'] =
     totalChars <= WHOLE_DIFF_CHARS ? 'whole' : 'selected';
-  const shown = new Set<string>();
+  /** How each shown chunk is shown: in full, as assertions, or its branch lines only. */
+  const shownAs = new Map<string, 'full' | 'assertions' | 'branches'>();
   const show = new Set<number>();
   if (mode === 'whole') {
-    for (const [id, ns] of shownLines) if (ns.length) shown.add(id);
+    for (const [id, ns] of shownLines)
+      if (ns.length)
+        shownAs.set(id, testsReduced && isTest(byIdMap.get(id)!) ? 'assertions' : 'full');
     for (const n of allLines) show.add(n);
   } else {
-    // Priority: what the body cites, test assertions, branching code, new names.
-    const isTest = (c: Ch) => roleOf(fileOf(c)) === 'tests';
-    const tiers: Ch[][] = [
-      chunks.filter((c) => cited.has(c.id)),
-      chunks.filter(isTest),
-      [...chunks]
-        .filter((c) => branches.get(c.id)! > 0)
-        .sort((a, b) => branches.get(b.id)! - branches.get(a.id)! || byId(a.id, b.id)),
-      chunks.filter((c) => fresh(c).length),
+    // Priority: tagged chunks in full; the first 3 branching lines of every
+    // branching chunk (most branches first), so one long chunk can't crowd out
+    // the rest; test assertions; the remaining branching lines; chunks only
+    // named in the prose; chunks adding names.
+    const branchy = [...diffable]
+      .filter((c) => branches.get(c.id)! > 0)
+      .sort((a, b) => branches.get(b.id)! - branches.get(a.id)! || byId(a.id, b.id));
+    const tiers: [Ch[], 'full' | 'branches', number][] = [
+      [diffable.filter((c) => tagged.has(c.id)), 'full', 0],
+      [branchy, 'branches', 3],
+      [diffable.filter(isTest), 'full', 0],
+      [branchy, 'branches', Infinity],
+      [diffable.filter((c) => namedChunk.has(c.id)), 'full', 0],
+      [diffable.filter((c) => fresh(c).length), 'full', 0],
     ];
     let used = 0;
-    for (const tier of tiers)
+    for (const [tier, how, max] of tiers)
       for (const c of tier) {
-        const ns = shownLines.get(c.id);
-        if (!ns?.length || shown.has(c.id)) continue;
+        const was = shownAs.get(c.id);
+        // Branch lines may be extended; anything else is shown once.
+        if (was && !(how === 'branches' && was === 'branches')) continue;
+        const ns = how === 'branches' ? branchSet(c, max) : shownLines.get(c.id);
+        if (!ns?.length) continue;
         const add = charsOf(ns.filter((n) => !show.has(n)));
         if (used + add > WHOLE_DIFF_CHARS) continue;
         used += add;
-        shown.add(c.id);
+        shownAs.set(
+          c.id,
+          how === 'branches' ? 'branches' : isTest(c) ? 'assertions' : 'full',
+        );
         for (const n of ns) show.add(n);
       }
   }
+  const shown = new Set(shownAs.keys());
 
   const out: string[] = [];
 
@@ -335,7 +387,11 @@ export function relationalPacket(
       for (const s of links.sentences.filter((x) => x.id.startsWith(`${k.id}#`))) {
         const tie = s.chunks.length
           ? `→ ${s.chunks.map(short).join(', ')}`
-          : '→ nothing tied (only the message states this)';
+          : !own.length
+            ? '→ no chunk ranked for it, and no code matched its commit (may be message-only)'
+            : own.length <= SMALL_COMMIT_CHUNKS
+              ? `→ no chunk ranked; commit's own code: ${own.map(short).join(', ')} (check whether they do it)`
+              : `→ no chunk ranked for it (may be message-only; commit's own code: ${names(own, 8)})`;
         commitLines.push(
           `  ${s.id.slice(k.id.length)} "${clip(s.text, 300)}" ${s.result ? '(reports a result: not a recorded run) ' : ''}${tie} | ${sentenceState(s.id)}`,
         );
@@ -368,7 +424,7 @@ export function relationalPacket(
 
   // ---- Files and chunks --------------------------------------------------------
   out.push(
-    `## Files and chunks (L: new-file lines; in: owning symbol; new: defined here, removed nowhere; redefines: existed before; branches: changed lines with if/else/case/catch/??/||/&&/default; asked in: requests whose edits or text tie to it${mode === 'selected' ? '; shown: its lines are in the diff below' : ''})`,
+    `## Files and chunks (L: new-file lines (old L: old-file, for a deletion); in: owning symbol; new: defined here, removed nowhere; redefines: existed before; branches: changed lines with if/else/case/catch/??/||/&&/default; asked in: requests whose edits or text tie to it; tagged: the writer's tags cite it; named: the prose names its file or a name it defines${mode === 'selected' ? '; shown: its lines are in the diff below' : ''})`,
     '',
   );
   for (const [fid, f] of fileById) {
@@ -398,6 +454,10 @@ export function relationalPacket(
     out.push(`${fid} ${f.path} (${meta})`);
     const plain: string[] = [];
     for (const c of list) {
+      if (versionOnly(c)) {
+        plain.push(`${c.id} ${diffRange(c)} (version bump)`);
+        continue;
+      }
       const parts: string[] = [];
       if (c.scope) parts.push(`in ${c.scope}`);
       const nw = fresh(c);
@@ -419,15 +479,26 @@ export function relationalPacket(
       if (b) parts.push(`branches ${b}`);
       const asked = (l?.why ?? []).filter((x) => isFact(x) && !broad.has(x));
       if (asked.length) parts.push(`asked in ${asked.slice(0, 3).join(', ')}`);
-      if (cited.has(c.id)) parts.push('cited');
+      if (tagged.has(c.id)) parts.push('tagged');
+      else if (namedChunk.has(c.id)) parts.push('named');
       const isShown = shown.has(c.id);
       if (!parts.length && (isShown || mode === 'selected')) {
         plain.push(`${c.id} ${diffRange(c)}`);
         continue;
       }
-      if (isShown) parts.push(role === 'tests' ? 'assertions shown' : 'shown');
+      const how = shownAs.get(c.id);
+      if (how)
+        parts.push(
+          how === 'assertions'
+            ? 'assertions shown'
+            : how === 'branches'
+              ? 'branch lines shown'
+              : 'shown',
+        );
+      // A pure deletion's range is in the old file.
+      const lines = `${c.added ? 'L' : 'old L'}${range(c.start, c.end)}`;
       out.push(
-        `  ${c.id} L${range(c.start, c.end)} ${diffRange(c)} +${c.added}/−${c.removed} | ${parts.join(' | ')}`,
+        `  ${c.id} ${lines} ${diffRange(c)} +${c.added}/−${c.removed} | ${parts.join(' | ')}`,
       );
     }
     if (plain.length) out.push(`  also ${plain.join(', ')}`);
@@ -438,6 +509,8 @@ export function relationalPacket(
   const leads: string[] = [];
   const silent = [...fileById].filter(
     ([fid, f]) =>
+      !skippedFile(f) &&
+      !chunks.filter((c) => c.fileId === fid).every(versionOnly) &&
       !named(f) &&
       !tags.has(fid) &&
       !chunks.some((c) => c.fileId === fid && cited.has(c.id)),
@@ -462,6 +535,27 @@ export function relationalPacket(
     );
   for (const f of check?.flags ?? [])
     leads.push(`- render flag at ${lineOf(f.sentence)}: ${clip(f.problem, 200)}`);
+  // Open points: what the evidence leaves open, which the body may need to say.
+  for (const f of links?.facts ?? []) {
+    const open = f.labels.filter((l) =>
+      /after the last commit|sent back|pushback|ambiguous session/.test(l),
+    );
+    if (open.length && !tags.has(f.id))
+      leads.push(
+        `- open point, ${f.id} (${open.join('; ')}), not cited: "${clip(f.text, 160)}"`,
+      );
+  }
+  const marks: number[] = [];
+  for (const c of diffable)
+    for (const l of c.lines)
+      if (l.sign === '+' && OPEN_MARK.test(l.text)) marks.push(l.patchNo!);
+  if (marks.length)
+    leads.push(
+      `- added TODO/FIXME/XXX/HACK lines (open work): ${marks
+        .slice(0, 12)
+        .map((n) => `diff:${n}`)
+        .join(', ')}${marks.length > 12 ? ` +${marks.length - 12}` : ''}`,
+    );
   if (!links)
     leads.push(
       "- the store's links were not available for this patch: commit sentences show no tied code.",
@@ -472,8 +566,8 @@ export function relationalPacket(
   const shownChars = charsOf(show);
   out.push(
     mode === 'whole'
-      ? `## Diff (whole: ${shownChars} chars without generated, lock, version and binary files; test files reduced to titles and assertions)`
-      : `## Diff (selected: ${shownChars} of ${totalChars} chars; the chunks the body cites, test assertions, branching chunks and chunks adding names; for others use tracetoon source <path> --run ${input.run.id})`,
+      ? `## Diff (whole: ${shownChars} chars without generated, lock, version and binary files${testsReduced ? '; test files reduced to titles and assertions' : ''})`
+      : `## Diff (selected: ${shownChars} of ${totalChars} chars; tagged chunks, branching lines (±1), test assertions, chunks the prose names, chunks adding names; for others use tracetoon source <path> --run ${input.run.id})`,
     '',
   );
   const w = String(patchLines.length).length;
