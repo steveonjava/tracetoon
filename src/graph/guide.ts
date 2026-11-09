@@ -143,17 +143,26 @@ export function guideRows(input: GuideInput): Row[] {
         cites: [str(r.ref)],
       });
   const changes = rowsOf(sections, 'changes');
+  // A change's behavior lines from the file a hunk is in (they start "<basename>:").
+  const behaviorIn = (c: Row, file: string) => {
+    const base = file.split('/').pop()!;
+    return list(c.behavior).filter((b) => b.startsWith(`${base}:`));
+  };
+  const withEffect = new Set<string>();
   for (const c of changes) {
-    const behavior = list(c.behavior);
-    const withCallers = scored.filter(
-      (x) => str(x.h.change) === str(c.change) && x.c?.files,
+    const x = scored.find(
+      (y) =>
+        str(y.h.change) === str(c.change) &&
+        y.c?.files &&
+        behaviorIn(c, str(y.h.file)).length,
     );
-    if (behavior.length && withCallers.length)
-      look.push({
-        kind: 'look closely at',
-        text: `${clip(behavior[0]!, 140)} — \`${withCallers[0]!.c!.term}\` is named in ${withCallers[0]!.c!.files} other file(s)`,
-        cites: [str(c.change)],
-      });
+    if (!x) continue;
+    withEffect.add(str(c.change));
+    look.push({
+      kind: 'look closely at',
+      text: `${clip(behaviorIn(c, str(x.h.file))[0]!, 140)} — \`${x.c!.term}\` is named in ${x.c!.files} other file(s)`,
+      cites: [str(c.change)],
+    });
   }
   for (const x of scored)
     if (
@@ -171,16 +180,22 @@ export function guideRows(input: GuideInput): Row[] {
     }
   out.push(...look.slice(0, 3));
 
-  // Effects: callers of a changed symbol and what they now see.
+  // Effects: callers of a changed symbol and the behavior change in its own file,
+  // for changes the look-closely items above don't already name.
+  const shownLook = new Set(look.slice(0, 3).map((r) => list(r.cites)[0]));
   const effects: Row[] = [];
   for (const c of changes) {
-    const x = scored.find((y) => str(y.h.change) === str(c.change) && y.c?.files);
+    if (shownLook.has(str(c.change)) && withEffect.has(str(c.change))) continue;
+    const x = scored.find(
+      (y) =>
+        str(y.h.change) === str(c.change) &&
+        y.c?.files &&
+        behaviorIn(c, str(y.h.file)).length,
+    );
     if (!x) continue;
-    const what = list(c.behavior)[0] ?? list(c.was)[0];
-    if (!what) continue;
     effects.push({
       kind: 'effect',
-      text: `\`${x.c!.term}\` is named in ${x.c!.files} other file(s), which now see: ${clip(what, 140)}`,
+      text: `\`${x.c!.term}\` is named in ${x.c!.files} other file(s), which now see: ${clip(behaviorIn(c, str(x.h.file))[0]!, 140)}`,
       cites: [str(c.change)],
     });
   }
