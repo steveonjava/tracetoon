@@ -209,4 +209,5 @@ def main():
         open(md_out, 'w').write(text)
 
 
-main()
+if __name__ == '__main__':
+    main()
