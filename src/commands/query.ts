@@ -1,6 +1,6 @@
 /** `tracetoon query`: ask a run's evidence graph a named question or read-only Cypher. */
 import { GraphError, withGraph } from '../graph/engine.ts';
-import { graphBrief, loadGraph } from '../graph/evidence.ts';
+import { graphBrief, loadGraph, R_CONTEXT_FILE } from '../graph/evidence.ts';
 import { isNeighborhood, parseLayout, runLayout } from '../graph/layout.ts';
 import {
   briefParts,
@@ -9,6 +9,9 @@ import {
   rawQuery,
   type Section,
 } from '../graph/queries.ts';
+import { contextText, type RelationalContext } from '../relational/index.ts';
+import { isRelational } from '../relational/mode.ts';
+import { readJson } from '../run.ts';
 import { toToon } from '../graph/toon.ts';
 import { assertRunOwner, findRun } from '../run.ts';
 import { count } from '../util/profile.ts';
@@ -63,6 +66,27 @@ export function queryCmd(cwd: string, words: string[], opts: QueryOpts): void {
   const repo = repository(cwd);
   const run = findRun(repo.gitDir, opts.run);
   assertRunOwner(run, repo.root, repo.branch);
+  // Relational evidence mode: the writer's evidence is the static context that
+  // prepare printed (also `query brief`); there are no lookups.
+  if (isRelational(run)) {
+    if (named?.name !== 'brief')
+      throw new UserError(
+        "This run's evidence is the context printed by `prepare` (also `tracetoon query brief`); no other lookups are available.",
+      );
+    if (asked)
+      throw new UserError(
+        '--layout applies only to the graph evidence mode; this run uses the relational context.',
+      );
+    const ctx = readJson<RelationalContext>(run, R_CONTEXT_FILE);
+    if (!ctx)
+      throw new UserError(
+        `Run ${run.id} has no evidence context; refresh it with \`tracetoon prepare\`.`,
+      );
+    const text = contextText(ctx);
+    count('graph.queries');
+    emit(opts, { run: run.id, query: 'brief', evidenceMode: 'relational', text }, () => text);
+    return;
+  }
   const graph = loadGraph(run);
   if (!graph)
     throw new UserError(

@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@resvg/resvg-wasm": "2.6.2",
+    "@sqlite.org/sqlite-wasm": "3.53.4-build2",
     "commander": "^14.0.0",
     "marked": "^16.0.0"
   },

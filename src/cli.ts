@@ -21,6 +21,9 @@ import {
 } from './commands/digest.ts';
 import { sourceCmd } from './commands/source.ts';
 import { queryCmd, ROW_CAP } from './commands/query.ts';
+import { initRelational } from './relational/builder.ts';
+import { envEvidenceMode, storedEvidenceMode } from './relational/mode.ts';
+import { skillSettings } from './contribution/skillSettings.ts';
 import { emit, exitCodeOf, UserError } from './commands/output.ts';
 import { publishCmd, renderCmd } from './commands/publish.ts';
 import { reviewImportCmd, reviewMergeCmd, reviewPacketCmd } from './commands/review.ts';
@@ -65,7 +68,33 @@ const program = new Command()
 
 const g = () => program.opts<{ json?: boolean }>();
 let timedAction: { name: string; run?: string; started: number } | undefined;
+/**
+ * Whether this command builds a relational-mode run's evidence: the
+ * relational/vector store needs SQLite and its embedding model loaded first
+ * (asynchronously). Loading them for a run that turns out to be graph mode is
+ * harmless; the build itself follows the run's stored mode.
+ */
+function buildsRelational(name: string, o: Record<string, unknown>): boolean {
+  if (name !== 'prepare' && name !== 'digest') return false;
+  const env = envEvidenceMode();
+  if (env) return env === 'relational';
+  if (String(o.evidenceMode ?? '').toLowerCase() === 'relational') return true;
+  let stored;
+  if (typeof o.run === 'string')
+    try {
+      const repo = repository(cwd);
+      stored = storedEvidenceMode(findRun(repo.gitDir, o.run));
+    } catch {
+      /* the command reports a bad run itself */
+    }
+  if (stored) return stored === 'relational';
+  return (
+    name === 'prepare' &&
+    String(skillSettings().evidenceMode ?? '').toLowerCase() === 'relational'
+  );
+}
 program.hook('preAction', (_command, action) => {
+  const relational = buildsRelational(action.name(), action.opts());
   if (
     action.opts().run &&
     ['render', 'publish', 'art', 'reroll', 'prompts'].includes(action.name())
@@ -78,6 +107,10 @@ program.hook('preAction', (_command, action) => {
     run: action.opts().run,
     started: performance.now(),
   };
+  if (relational)
+    return initRelational().catch(() => {
+      /* fail open: prepare then reports the evidence context unavailable */
+    });
 });
 
 program
@@ -194,6 +227,10 @@ program
   .option(
     '--layout <layout>',
     'evidence brief layout for this run: toon (default), neighborhood or neighborhood-wide; later commands use it',
+  )
+  .option(
+    '--evidence-mode <mode>',
+    'evidence store for this run (SKILL "Evidence mode:"): graph (default, the evidence graph brief) or relational (the relational/vector context); later commands use it',
   )
   .option(
     '--review-passes <n>',

@@ -155,7 +155,8 @@ export interface ImportContext {
   /** The exact rendered body (review-input.json body). */
   body: string;
   patch: string;
-  hunks: PatchHunk[];
+  /** The run's hunks (graph mode) or store chunks (relational mode), by the H# ids its packet used. */
+  hunks: Pick<PatchHunk, 'id' | 'file' | 'start' | 'end' | 'diff'>[];
   /** Brief sections (from the stored graph), when the run has one. */
   brief?: Section[];
   /** Whether a ref is valid in the review contract (diff:, body:, commit:, digest:, code:, title). */

@@ -23,13 +23,24 @@ import type { BriefParts } from './briefRender.ts';
 import { toToon } from './toon.ts';
 import { renderNeighborhood } from './neighborhood.ts';
 import { briefBudget, isNeighborhood, type BriefLayout } from './layout.ts';
+import {
+  budgetTokens,
+  contextText,
+  type RelationalContext,
+} from '../relational/index.ts';
+import { buildRelationalContext } from '../relational/builder.ts';
+import { isRelational, type EvidenceMode } from '../relational/mode.ts';
+import { sentenceCoverage } from '../relational/coverage.ts';
 
 export const GRAPH_FILE = 'evidence-graph.json';
 export const GRAPH_REVIEW_FILE = 'graph-review.json';
+/** The relational/vector arm's context (shape test). */
+export const R_CONTEXT_FILE = 'relational-context.json';
 
 export interface GraphOutcome {
   graph?: EvidenceGraph;
   derived?: GraphDerived;
+  relational?: RelationalContext;
   error?: string;
 }
 
@@ -109,19 +120,31 @@ export function graphEnricher(
   out: GraphOutcome,
   /** Exact-content check receipts, so the graph can tell fresh checks from logged ones. */
   verification?: DigestRun[],
+  /** The run's evidence mode (src/relational/mode.ts). */
+  mode: EvidenceMode = 'graph',
 ): (full: TraceDigest, trails: SessionTrail[]) => Relevance | undefined {
   return (full, trails) => {
     try {
       if (verification) full.verification = verification;
-      const graph = measured('graph.build', () =>
-        buildEvidenceGraph({
-          full,
-          trails,
-          patch: submission(truth).patch,
-          commitFiles: commitFiles(truth),
-          commitLines: commitLines(truth),
-        }),
-      );
+      const inputs = {
+        full,
+        trails,
+        patch: submission(truth).patch,
+        commitFiles: commitFiles(truth),
+        commitLines: commitLines(truth),
+      };
+      if (mode === 'relational') {
+        // The writer's context comes from the relational/vector store, built
+        // from the same inputs. The graph is still built, but only for render's
+        // shared Validation section; it doesn't annotate the digest.
+        out.relational = measured('relational.build', () =>
+          buildRelationalContext(inputs, { budgetTokens: budgetTokens() }),
+        );
+        out.graph = buildEvidenceGraph(inputs);
+        out.derived = deriveFromGraphJson(out.graph);
+        return undefined;
+      }
+      const graph = measured('graph.build', () => buildEvidenceGraph(inputs));
       // What the head tree still says about removed names, and who calls the changed ones.
       measured('graph.headScan', () =>
         addHeadScan(
@@ -149,11 +172,56 @@ export function graphEnricher(
 }
 
 export function saveGraph(run: Run, outcome: GraphOutcome): void {
-  for (const f of [GRAPH_FILE, GRAPH_REVIEW_FILE])
+  for (const f of [GRAPH_FILE, GRAPH_REVIEW_FILE, R_CONTEXT_FILE])
     if (existsSync(join(run.dir, f))) unlinkSync(join(run.dir, f));
+  if (outcome.relational) writeJson(run, R_CONTEXT_FILE, outcome.relational);
   if (!outcome.graph || !outcome.derived) return;
   writeJson(run, GRAPH_FILE, outcome.graph);
-  writeJson(run, GRAPH_REVIEW_FILE, outcome.derived.review);
+  // The reviewer's graph-derived leads belong to the graph arm only.
+  if (!outcome.relational) writeJson(run, GRAPH_REVIEW_FILE, outcome.derived.review);
+}
+
+/**
+ * A relational run's brief parts, for render and the review import: the shared
+ * Validation rows, commit sentences for coverage (without the graph's file
+ * placement), the relational context's refs for tag checks, and which chunks
+ * stand for each commit sentence (the store's links).
+ */
+function relationalBriefParts(
+  graph: EvidenceGraph,
+  run: Run,
+): BriefParts & { hunkLinks: Record<string, string[]> } {
+  const parts = withGraph(graph, (g) => briefParts(g));
+  const ctx = readJson<RelationalContext>(run, R_CONTEXT_FILE);
+  const keep = (title: string) => parts.sections.find((s) => s.title === title);
+  const commits = keep('commitMessages');
+  return {
+    unchecked: parts.unchecked,
+    hunkLinks: {},
+    sections: [
+      ...(commits
+        ? [{ ...commits, rows: commits.rows.map(({ implementedBy: _p, ...r }) => r) }]
+        : []),
+      {
+        title: 'context',
+        columns: ['ref', 'text'],
+        rows: (ctx?.refs ?? []).map((r) => ({ ref: r.id, text: r.text })),
+      },
+      ...(keep('validation') ? [keep('validation')!] : []),
+      ...(ctx?.links
+        ? [
+            {
+              title: 'coverage',
+              columns: ['ref', 'coveredBy'],
+              rows: sentenceCoverage(
+                ctx.links,
+                (commits?.rows ?? []).map((r) => String(r.ref ?? '')),
+              ),
+            },
+          ]
+        : []),
+    ],
+  };
 }
 
 export function loadGraph(run: Run): EvidenceGraph | undefined {
@@ -174,8 +242,11 @@ export function loadGraphReview(run: Run): GraphDerived['review'] | undefined {
 export function graphBriefParts(
   graph: EvidenceGraph,
   layout: BriefLayout = 'toon',
+  /** The run, so a relational run's parts come from its context instead. */
+  run?: Run,
 ): (BriefParts & { hunkLinks: Record<string, string[]> }) | undefined {
   try {
+    if (run && isRelational(run)) return relationalBriefParts(graph, run);
     return withGraph(graph, (g) => briefParts(g, { layout }));
   } catch {
     return undefined;
@@ -184,10 +255,14 @@ export function graphBriefParts(
 
 export function graphBrief(
   graph: EvidenceGraph,
-  opts: { rowCap?: number; layout?: BriefLayout } = {},
+  opts: { rowCap?: number; layout?: BriefLayout; run?: Run } = {},
 ): string | undefined {
   const rowCap = opts.rowCap ?? 60;
   try {
+    if (opts.run && isRelational(opts.run)) {
+      const ctx = readJson<RelationalContext>(opts.run, R_CONTEXT_FILE);
+      return ctx ? contextText(ctx) : undefined;
+    }
     if (isNeighborhood(opts.layout))
       return withGraph(graph, (g) => {
         const { sections } = briefParts(g, { layout: 'neighborhood' });

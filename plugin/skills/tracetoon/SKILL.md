@@ -103,8 +103,9 @@ reviewer separate.
    `Review lenses:` lists lenses, `--reviewer-model <name>` when `Reviewer
    model:` names a model, `--reviewer-effort <level>` when `Reviewer effort:`
    names a level, `--reviewer-runner tracetoon` when `Reviewer runner:` says
-   tracetoon (publish refuses until that review plan is met), and
-   `--review-recheck <once|contested|none>` from `Review recheck:`. Add `--run
+   tracetoon (publish refuses until that review plan is met),
+   `--review-recheck <once|contested|none>` from `Review recheck:`, and
+   `--evidence-mode <graph|relational>` from `Evidence mode:`. Add `--run
    <id>` to reuse the run from step 0. It prints the run folder and the digest path. Run it as its
    own command, after any `git commit`, never chained in the same command: your own tool call is only logged once it
    finishes, so a digest inside it can't see that command.
@@ -456,6 +457,8 @@ Reviewer runner: agent.
 Review recheck: once.
 
 Brief layout: toon.
+
+Evidence mode: graph.
 
 ### Other commands
 

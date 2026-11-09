@@ -64,6 +64,8 @@ import {
   type Run,
 } from '../run.ts';
 import { repository } from '../workflow/state.ts';
+import { buildPacketEvidence, relationalHunks } from '../packet/evidence.ts';
+import { isRelational } from '../relational/mode.ts';
 import { emit, UserError, type OutOpts } from './output.ts';
 
 export const PACKET_FILE = 'review-packet.md';
@@ -73,10 +75,10 @@ export const packetFile = (lens?: string) =>
 /** Whole-diff budget: a reduced patch at or under this many characters is shown entire. */
 export const WHOLE_DIFF_CHARS = 16_000;
 
-const LOCKFILE =
+export const LOCKFILE =
   /(^|\/)(package-lock\.json|npm-shrinkwrap\.json|bun\.lockb?|yarn\.lock|pnpm-lock\.yaml|Cargo\.lock|poetry\.lock|Pipfile\.lock|uv\.lock|Gemfile\.lock|composer\.lock|go\.sum|flake\.lock)$/;
 /** Added test lines worth keeping: assertions and test titles. */
-const ASSERTION =
+export const ASSERTION =
   /expect|assert|toBe|toEqual|\btest\s*\(|\bit\s*\(|\bdescribe\s*\(|\bdef test_|\bfunc Test/;
 
 export interface PacketInput {
@@ -94,6 +96,25 @@ export interface PacketInput {
   hunkLinks?: Record<string, string[]>;
   /** A lens reviewer's packet: its checklist first, brief rows it doesn't use left out. */
   lens?: ReviewLens;
+  /**
+   * Evidence-mode-specific evidence (src/packet/evidence.ts, relational mode):
+   * replaces the brief rows, hunk table and diff below the body. Without it,
+   * the packet is the graph mode's.
+   */
+  evidence?: PacketEvidence;
+}
+
+/** What an evidence mode's packet builder puts below the title and body. */
+export interface PacketEvidence {
+  /** Markdown lines, starting with their own `##` headings. */
+  lines: string[];
+  mode: 'whole' | 'selected';
+  /** Characters of diff shown. */
+  diffChars: number;
+  /** Hunk or chunk ids whose diff lines are shown. */
+  shownHunks: string[];
+  /** The citation legend line for this mode's refs. */
+  legend: string;
 }
 
 /** What each lens checks, printed at the top of its packet. */
@@ -140,6 +161,46 @@ export const LENS_CHECKLISTS: Record<
     ],
   },
 };
+
+/** The lens checklists for a relational-mode packet: the same checks, in its sections' terms. */
+export const RELATIONAL_LENS_CHECKLISTS: Record<ReviewLens, { title: string; check: string[] }> =
+  {
+    a: {
+      title: LENS_CHECKLISTS.a.title,
+      check: [
+        '- Each file, function, type or command the body names: is it where "Files and chunks" and the diff show that behavior? A behavior credited to the wrong file or function is `contradicted`.',
+        '- "new"/"added"/"introduces" only for names under `new:`; "existing"/"already"/"extends" only for names under `redefines:` or not defined in the diff.',
+        '- A fact only a commit message states ("may be message-only", no chunk ranked) written as code fact.',
+      ],
+    },
+    b: {
+      title: LENS_CHECKLISTS.b.title,
+      check: [
+        '- only, just, always, every, all, never, no longer: find the branch, default, fallback or caller that takes another path (`branches` in "Files and chunks").',
+        '- "previously", "used to", "before", "was", "no longer": the old behavior must match removed (-) lines or a request; invented old behavior is `unsupported`.',
+        '- Housekeeping claims (version bump, generated or lock files, renames, docs, formatting, "no other changes") vs the diff and the files whose diff is not shown.',
+      ],
+    },
+    c: {
+      title: LENS_CHECKLISTS.c.title,
+      check: [
+        '- Motive or trigger: a request (S#, D#, P#) explains the change but the body never says why.',
+        '- Open points the body leaves out or turns into certainty (the open-point coverage leads, added TODO/FIXME lines).',
+        '- Paths no test covers, described as verified.',
+      ],
+    },
+    d: {
+      title: LENS_CHECKLISTS.d.title,
+      check: [
+        '- Every changed file in "Files and chunks" and every commit-message sentence: a body sentence says specifically what it does (the function or command and its new behavior), not just that the area changed.',
+        '- Tests: each added or changed test file is named with what its new tests assert (its `tests:` titles and assertions).',
+        '- Docs, guides, SKILL/README and prompt files the diff changes: each gets a clause saying what changed in it.',
+        '- Old → new values (a removed (-) line and its added (+) replacement: models, limits, windows, names, defaults): stated with both values.',
+        '- The reason the code itself gives (code comments in added lines, commit messages): said, attributed.',
+        '- A secondary user-visible change (preview page, output format, CLI flag) the body skips.',
+      ],
+    },
+  };
 
 export interface Packet {
   text: string;
@@ -321,6 +382,7 @@ function citedHunks(
 
 /** Build review-packet.md. Deterministic: the same inputs give the same text. */
 export function leanPacket(input: PacketInput): Packet {
+  if (input.evidence) return evidencePacket(input, input.evidence);
   const patchLines = input.patch.split(/\r?\n/);
   const hunks = patchHunks(input.patch);
   const role = roleOf(input.graph);
@@ -432,6 +494,43 @@ export function leanPacket(input: PacketInput): Packet {
   return { text: out.join('\n') + '\n', mode, diffChars, shownHunks: [...shownIds] };
 }
 
+/** A relational-mode packet: the same header, lens checklist and body, then the mode's evidence. */
+function evidencePacket(input: PacketInput, e: PacketEvidence): Packet {
+  const lens = input.lens ? RELATIONAL_LENS_CHECKLISTS[input.lens] : undefined;
+  const out = [
+    `# Lean review packet: run ${input.runId}${lens ? ` (${lens.title})` : ''}`,
+    '',
+    `review-input fingerprint: ${input.fingerprint}`,
+    e.legend,
+    'This run uses the relational evidence mode: there are no brief rows (CH#, L#, T#, `was:`, `implementedBy`); "Requests", "Commit messages" and "Files and chunks" below stand in for them.',
+    '',
+    ...(lens
+      ? [
+          `## ${lens.title}: checklist`,
+          '',
+          'Check only these; at most 6 findings.',
+          ...lens.check,
+          '',
+        ]
+      : []),
+    '## Title',
+    '',
+    input.title,
+    '',
+    '## Body (line-numbered)',
+    '',
+    ...numberedBody(input.body),
+    '',
+    ...e.lines,
+  ];
+  return {
+    text: out.join('\n') + '\n',
+    mode: e.mode,
+    diffChars: e.diffChars,
+    shownHunks: e.shownHunks,
+  };
+}
+
 export function openRun(cwd: string, id?: string): { run: Run; root: string } {
   const repo = repository(cwd);
   const run = findRun(repo.gitDir, id);
@@ -454,7 +553,7 @@ function storedBrief(
   run: Run,
   graph: EvidenceGraph | undefined,
 ): { sections: Section[]; hunkLinks: Record<string, string[]> } | undefined {
-  return graph ? graphBriefParts(graph, runLayout(run)) : undefined;
+  return graph ? graphBriefParts(graph, runLayout(run), run) : undefined;
 }
 
 export function reviewPacketCmd(
@@ -499,17 +598,26 @@ export function writeLeanPacket(
   const { input, patch } = renderedInput(run);
   const graph = loadGraph(run);
   const parts = storedBrief(run, graph);
+  const draft = readText(run, 'body.md');
+  const evidence = buildPacketEvidence({
+    run,
+    title: input.title,
+    body: input.body,
+    draft,
+    patch,
+  });
   const packet = leanPacket({
     runId: run.id,
     title: input.title,
     body: input.body,
-    draft: readText(run, 'body.md'),
+    draft,
     patch,
     fingerprint: input.fingerprint,
     graph,
     brief: parts?.sections,
     hunkLinks: parts?.hunkLinks,
     ...(lens ? { lens } : {}),
+    ...(evidence ? { evidence } : {}),
   });
   const path = join(run.dir, fileName ?? packetFile(lens));
   writeFileSync(path, packet.text, 'utf8');
@@ -754,7 +862,8 @@ export function importLeanReview(
     title: input.title,
     body: input.body,
     patch,
-    hunks: patchHunks(patch),
+    // A relational run's H# refs are its store's chunks, not the graph's hunks.
+    hunks: isRelational(run) ? relationalHunks(patch) : patchHunks(patch),
     brief: storedBrief(run, loadGraph(run))?.sections,
     contractRef,
     fileExists: (p) =>

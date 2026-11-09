@@ -1,7 +1,7 @@
 /**
  * The variant lines at the end of the skill's Workflow section
  * (`Brief layout:`, `Reviewer model:`, `Reviewer effort:`, `Review passes:`,
- * `Review lenses:`, `Reviewer runner:`, `Review recheck:`), read from the SKILL.md that ships next to this runtime.
+ * `Review lenses:`, `Reviewer runner:`, `Review recheck:`, `Evidence mode:`), read from the SKILL.md that ships next to this runtime.
  *
  * `prepare` uses them as defaults when the agent passes no matching flag, so a
  * configured reviewer plan holds even when the agent forgets to pass it on.
@@ -18,6 +18,7 @@ export interface SkillSettings {
   reviewLenses?: string;
   reviewerRunner?: string;
   reviewRecheck?: string;
+  evidenceMode?: string;
 }
 
 const LINES: Record<string, keyof SkillSettings> = {
@@ -28,6 +29,7 @@ const LINES: Record<string, keyof SkillSettings> = {
   'Review lenses': 'reviewLenses',
   'Reviewer runner': 'reviewerRunner',
   'Review recheck': 'reviewRecheck',
+  'Evidence mode': 'evidenceMode',
 };
 
 /** Parse the variant lines out of SKILL.md text. */

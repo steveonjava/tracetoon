@@ -33,6 +33,12 @@ import {
 } from '../graph/evidence.ts';
 import { LAYOUT_FILE, parseLayout, runLayout, saveRunLayout } from '../graph/layout.ts';
 import {
+  EVIDENCE_MODE_FILE,
+  parseEvidenceMode,
+  runEvidenceMode,
+  saveRunEvidenceMode,
+} from '../relational/mode.ts';
+import {
   skillSettings,
   withSkillDefaults,
   type SkillSettings,
@@ -91,6 +97,8 @@ export interface DigestOpts extends ScanOpts {
   budget?: number;
   /** Brief layout for this run (`prepare --layout`); kept for later commands. */
   layout?: string;
+  /** Evidence store for this run (`prepare --evidence-mode`): graph or relational; kept for later commands. */
+  evidenceMode?: string;
 }
 
 export function digestHash(d: TraceDigest): string {
@@ -106,14 +114,17 @@ export function digestCmd(
 ) {
   const { truth, matches } = shared ?? scan(cwd, { base: opts.base, noGh: opts.offline });
   let layout;
+  let mode;
   try {
     layout = parseLayout(opts.layout);
+    mode = parseEvidenceMode(opts.evidenceMode);
   } catch (e) {
     throw new UserError((e as Error).message);
   }
   const run = opts.run ? findRun(truth.gitDir, opts.run) : newRun(truth.gitDir);
   assertRunOwner(run, truth.toplevel, truth.head);
   if (layout) saveRunLayout(run, layout);
+  if (mode) saveRunEvidenceMode(run, mode);
   const config = loadConfig(truth.toplevel);
   const selected = readJson<{ include?: string[]; exclude?: string[] }>(
     run,
@@ -137,7 +148,7 @@ export function digestCmd(
     ...build,
     interop,
     budgetTokens: opts.budget ?? config.budgetTokens,
-    enrich: graphEnricher(truth, graph, verification),
+    enrich: graphEnricher(truth, graph, verification, runEvidenceMode(run)),
   });
   try {
     recordTiming(run, 'digest-extraction', extractionMs);
@@ -208,7 +219,7 @@ export function digestCmd(
   writeJson(run, 'digest-full.json', full);
   saveGraph(run, graph);
   const brief = graph.graph
-    ? graphBrief(graph.graph, { layout: runLayout(run) })
+    ? graphBrief(graph.graph, { layout: runLayout(run), run })
     : undefined;
   writeFileSync(join(run.dir, 'evidence-notes.md'), evidenceNotes(full, brief), 'utf8');
   const captured = submissionSnapshot(truth);
@@ -427,6 +438,8 @@ export function prepareCmd(cwd: string, given: DigestOpts & PlanOptions) {
     }
   })();
   if (existing && existsSync(join(existing.dir, LAYOUT_FILE))) delete skill.layout;
+  if (existing && existsSync(join(existing.dir, EVIDENCE_MODE_FILE)))
+    delete skill.evidenceMode;
   if (existing && existsSync(join(existing.dir, PLAN_FILE))) {
     delete skill.reviewerModel;
     delete skill.reviewerEffort;
@@ -453,6 +466,7 @@ export function prepareCmd(cwd: string, given: DigestOpts & PlanOptions) {
     throw new UserError(
       'Repository changed during preparation. Retained outputs are stale; prepare again after finalizing the changes.',
     );
+  const relational = runEvidenceMode(prepared.run) === 'relational';
   const roles = {
     schema: 'tracetoon.role-packets/v1',
     run: prepared.run.id,
@@ -484,12 +498,20 @@ export function prepareCmd(cwd: string, given: DigestOpts & PlanOptions) {
       'change-map.json',
     ],
     graph: prepared.graph
-      ? {
-          path: 'evidence-graph.json',
-          stats: prepared.graph.stats,
-          drafter: ['brief', 'why <path>', 'turn <S#>', 'unverified'],
-          reviewer: ['unverified', 'unexplained', 'why <path|H#>', 'stale <R#>'],
-        }
+      ? relational
+        ? // Relational mode: the graph only feeds render's Validation section; `query brief` is the context.
+          {
+            path: 'evidence-graph.json',
+            stats: prepared.graph.stats,
+            drafter: ['brief'],
+            reviewer: [],
+          }
+        : {
+            path: 'evidence-graph.json',
+            stats: prepared.graph.stats,
+            drafter: ['brief', 'why <path>', 'turn <S#>', 'unverified'],
+            reviewer: ['unverified', 'unexplained', 'why <path|H#>', 'stale <R#>'],
+          }
       : null,
     instructions:
       'Use fresh role contexts where supported. Read the cold-read packet before the reviewer evidence. Expand referenced evidence in batches; missing evidence remains unknown. Drafter and reviewer: ask the evidence graph with `tracetoon query <name> --run <id>` (start with `brief`) before reading the whole patch; its diff refs are citable as change-map behaviorChecks evidence.',
@@ -501,6 +523,7 @@ export function prepareCmd(cwd: string, given: DigestOpts & PlanOptions) {
       run: prepared.run.id,
       ...(prepared.graph ? { next: graphNext(prepared.run.id, plan) } : {}),
       ...(planEnforced(plan) ? { reviewPlan: plan } : {}),
+      ...(relational ? { evidenceMode: 'relational' } : {}),
       // One JSON line, so piping through `head` still shows the whole map.
       ...(prepared.brief ? { brief: prepared.brief } : {}),
       runDir: prepared.run.dir,
