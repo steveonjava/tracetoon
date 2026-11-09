@@ -162,7 +162,11 @@ export function buildPacketEvidence(
     // Sentences: split on sentence ends that are followed by a capital or a tag-free start.
     for (const sent of line.split(/(?<=[.!?]\]?)\s+(?=[A-Z`"(])/)) {
       const tags = [...sent.matchAll(TAG)].flatMap((m) => m[1]!.split(/\s*[,;]\s*/));
-      const clean = sent.replace(TAG, '').replace(/\s+/g, ' ').trim();
+      const clean = sent
+        .replace(TAG, '')
+        .replace(/\s+([.,;:!?])/g, '$1')
+        .replace(/\s+/g, ' ')
+        .trim();
       if (!clean || clean.split(/\s+/).length < 4) continue;
       if (!tags.length) {
         untagged.push(clean);
