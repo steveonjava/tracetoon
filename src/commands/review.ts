@@ -40,16 +40,17 @@ import {
   type Run,
 } from '../run.ts';
 import { repository } from '../workflow/state.ts';
+import { buildPacketEvidence } from '../packet/evidence.ts';
 import { emit, UserError, type OutOpts } from './output.ts';
 
 export const PACKET_FILE = 'review-packet.md';
 /** Whole-diff budget: a reduced patch at or under this many characters is shown entire. */
 export const WHOLE_DIFF_CHARS = 16_000;
 
-const LOCKFILE =
+export const LOCKFILE =
   /(^|\/)(package-lock\.json|npm-shrinkwrap\.json|bun\.lockb?|yarn\.lock|pnpm-lock\.yaml|Cargo\.lock|poetry\.lock|Pipfile\.lock|uv\.lock|Gemfile\.lock|composer\.lock|go\.sum|flake\.lock)$/;
 /** Added test lines worth keeping: assertions and test titles. */
-const ASSERTION =
+export const ASSERTION =
   /expect|assert|toBe|toEqual|\btest\s*\(|\bit\s*\(|\bdescribe\s*\(|\bdef test_|\bfunc Test/;
 
 export interface PacketInput {
@@ -63,6 +64,24 @@ export interface PacketInput {
   fingerprint: string;
   graph?: EvidenceGraph;
   brief?: Section[];
+  /**
+   * Arm-specific evidence (src/packet/evidence.ts): replaces the brief rows,
+   * hunk table and diff below the body. Without it, the packet is built as before.
+   */
+  evidence?: PacketEvidence;
+}
+
+/** What an arm's packet builder puts below the title and body. */
+export interface PacketEvidence {
+  /** Markdown lines, starting with their own `##` headings. */
+  lines: string[];
+  mode: 'whole' | 'selected';
+  /** Characters of diff shown. */
+  diffChars: number;
+  /** Hunk or chunk ids whose diff lines are shown. */
+  shownHunks: string[];
+  /** The citation legend line for this arm's refs. */
+  legend: string;
 }
 
 export interface Packet {
@@ -74,18 +93,18 @@ export interface Packet {
 }
 
 type Role = ReturnType<typeof fileRole>;
-const roleOf = (graph: EvidenceGraph | undefined) => {
+export const roleOf = (graph: EvidenceGraph | undefined) => {
   const roles = new Map<string, string>();
   for (const n of graph?.nodes ?? [])
     if (n.label === 'File' && typeof n.props.role === 'string')
       roles.set(n.id, n.props.role);
   return (file: string): Role => (roles.get(file) as Role) ?? fileRole(file);
 };
-const skipped = (file: string, role: Role) =>
+export const skipped = (file: string, role: Role) =>
   role === 'generated' || role === 'version' || LOCKFILE.test(file);
 
 /** Which Change (CH#) each hunk belongs to, by its diff range. */
-function hunkChanges(graph: EvidenceGraph | undefined): Map<string, string[]> {
+export function hunkChanges(graph: EvidenceGraph | undefined): Map<string, string[]> {
   const diffOf = new Map<string, string>();
   for (const n of graph?.nodes ?? [])
     if (n.label === 'Hunk' && typeof n.props.diff === 'string')
@@ -100,7 +119,7 @@ function hunkChanges(graph: EvidenceGraph | undefined): Map<string, string[]> {
 }
 const byNum = (a: string, b: string) =>
   Number(/\d+/.exec(a)?.[0] ?? 0) - Number(/\d+/.exec(b)?.[0] ?? 0);
-const lineRange = (diff: string): [number, number] => {
+export const lineRange = (diff: string): [number, number] => {
   const m = /^diff:(\d+)(?:-(\d+))?$/.exec(diff)!;
   return [Number(m[1]), Number(m[2] ?? m[1])];
 };
@@ -163,7 +182,7 @@ function briefLines(brief: Section[] | undefined): string[] {
 }
 
 /** The body with line numbers; the generated Validation section, markers and comic are elided. */
-function numberedBody(body: string): string[] {
+export function numberedBody(body: string): string[] {
   const lines = body.split(/\r?\n/);
   const w = String(lines.length).length;
   const out: string[] = [];
@@ -224,6 +243,31 @@ function citedHunks(
 
 /** Build review-packet.md. Deterministic: the same inputs give the same text. */
 export function leanPacket(input: PacketInput): Packet {
+  if (input.evidence) {
+    const e = input.evidence;
+    const out = [
+      `# Lean review packet: run ${input.runId}`,
+      '',
+      `review-input fingerprint: ${input.fingerprint}`,
+      e.legend,
+      '',
+      '## Title',
+      '',
+      input.title,
+      '',
+      '## Body (line-numbered)',
+      '',
+      ...numberedBody(input.body),
+      '',
+      ...e.lines,
+    ];
+    return {
+      text: out.join('\n') + '\n',
+      mode: e.mode,
+      diffChars: e.diffChars,
+      shownHunks: e.shownHunks,
+    };
+  }
   const patchLines = input.patch.split(/\r?\n/);
   const hunks = patchHunks(input.patch);
   const role = roleOf(input.graph);
@@ -337,8 +381,8 @@ function renderedInput(run: Run): { input: ReviewInput; patch: string } {
   return { input, patch };
 }
 
-function storedBrief(graph: EvidenceGraph | undefined): Section[] | undefined {
-  return graph ? graphBriefParts(graph)?.sections : undefined;
+function storedBrief(graph: EvidenceGraph | undefined, run?: Run): Section[] | undefined {
+  return graph ? graphBriefParts(graph, run)?.sections : undefined;
 }
 
 export function reviewPacketCmd(
@@ -352,15 +396,19 @@ export function reviewPacketCmd(
   const { run } = openRun(cwd, opts.run);
   const { input, patch } = renderedInput(run);
   const graph = loadGraph(run);
+  const draft = readText(run, 'body.md');
   const packet = leanPacket({
     runId: run.id,
     title: input.title,
     body: input.body,
-    draft: readText(run, 'body.md'),
+    draft,
     patch,
     fingerprint: input.fingerprint,
     graph,
-    brief: storedBrief(graph),
+    brief: storedBrief(graph, run),
+    evidence:
+      buildPacketEvidence({ run, title: input.title, body: input.body, draft, patch }) ??
+      undefined,
   });
   const path = join(run.dir, PACKET_FILE);
   writeFileSync(path, packet.text, 'utf8');
@@ -455,7 +503,7 @@ export function importLeanReview(
     body: input.body,
     patch,
     hunks: patchHunks(patch),
-    brief: storedBrief(loadGraph(run)),
+    brief: storedBrief(loadGraph(run), run),
     contractRef,
     fileExists: (p) =>
       !isAbsolute(p) && !p.split(/[\\/]/).includes('..') && existsSync(join(root, p)),
