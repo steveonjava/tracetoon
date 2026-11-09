@@ -136,6 +136,19 @@ export function guideRows(input: GuideInput): Row[] {
   }
 
   const look: Row[] = [];
+  // Checks: when no check passed after the last commit, say so first (a writer
+  // otherwise reads a late pass as "the final code passes").
+  const notFinal = rowsOf(sections, 'process').filter(
+    (r) =>
+      ['test', 'typecheck', 'build', 'lint'].includes(str(r.kind)) &&
+      /no passing run recorded after the last commit/.test(str(r.fact)),
+  );
+  if (notFinal.length)
+    look.push({
+      kind: 'look closely at',
+      text: `no ${notFinal.map((r) => str(r.kind)).join(', ')} run passed after the last commit: don't say the final code passes; say which run passed and when`,
+      cites: notFinal.map((r) => str(r.ref)),
+    });
   for (const r of rowsOf(sections, 'limits'))
     if (r.kind === 'open')
       look.push({
@@ -180,6 +193,31 @@ export function guideRows(input: GuideInput): Row[] {
       });
     }
   out.push(...look.slice(0, 3));
+
+  // Attribution: a change whose commit message gives a reason of its own (found
+  // while…, noticed…) though a request's turn made its edits. Writers turned the
+  // turn into "the user asked for this".
+  const commitRows = rowsOf(sections, 'commitMessages');
+  const attribute: Row[] = [];
+  for (const c of rowsOf(sections, 'changes')) {
+    const reqs = list(c.requests).filter((q) => /^S\d+$/.test(q.split(' ')[0]!));
+    if (!reqs.length) continue;
+    for (const sha of list(c.commits)) {
+      const motive = commitRows.find(
+        (r) =>
+          str(r.ref).startsWith(sha.slice(0, 7)) &&
+          /\b(found|noticed|discovered|spotted)\b/i.test(str(r.text)),
+      );
+      if (!motive) continue;
+      attribute.push({
+        kind: 'attribute',
+        text: `${str(c.change)}: its commit says "${clip(str(motive.text), 100)}"; ${reqs.map((q) => q.split(' ')[0]).join(', ')} is the turn its edits were made in, not necessarily why: attribute the reason to the commit message`,
+        cites: [str(c.change), str(motive.ref)],
+      });
+      break;
+    }
+  }
+  out.push(...attribute.slice(0, 2));
 
   // Effects: callers of a changed symbol and the behavior change in its own file,
   // for changes the look-closely items above don't already name.
