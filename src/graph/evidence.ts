@@ -27,6 +27,7 @@ import {
   type RelationalContext,
 } from '../relational/index.ts';
 import { buildRelationalContext } from '../relational/builder.ts';
+import { sentenceCoverage } from '../relational/coverage.ts';
 
 export const GRAPH_FILE = 'evidence-graph.json';
 export const GRAPH_REVIEW_FILE = 'graph-review.json';
@@ -201,6 +202,18 @@ export function graphBriefParts(graph: EvidenceGraph, run?: Run): BriefParts | u
           rows: (ctx?.refs ?? []).map((r) => ({ ref: r.id, text: r.text })),
         },
         ...(keep('validation') ? [keep('validation')!] : []),
+        ...(ctx?.links
+          ? [
+              {
+                title: 'coverage',
+                columns: ['ref', 'coveredBy'],
+                rows: sentenceCoverage(
+                  ctx.links,
+                  (commits?.rows ?? []).map((r) => String(r.ref ?? '')),
+                ),
+              },
+            ]
+          : []),
       ],
     };
   } catch {

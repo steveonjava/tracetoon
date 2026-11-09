@@ -17,6 +17,7 @@ Code: `src/relational/`
 - `pack.ts`: packing and layout.
 - `embed.ts`: embeddings.
 - `builder.ts`: wires these together.
+- `coverage.ts`: which chunks cover each commit sentence, for `render`.
 
 Nothing here imports from `src/graph/` except the input types.
 
@@ -33,6 +34,7 @@ GraphInputs ─ETL→ SQLite record tables ─SQL joins→ exact links ┐
 3. **Hybrid search** (`hybridSearch`): every request, decision, plan paragraph, commit subject and commit-message sentence is run as a query against the diff chunks. Three rankers are fused with reciprocal rank fusion, and the fusion itself is SQL.
 4. **Packing** (`pack`): every possible line of output is a candidate with a value and an exact character cost. A greedy picks by value per character, with diminishing returns.
 5. **Refs**: the ids that appear in the final text, each with the full text of its item, and nothing else.
+6. **Links** (`links` in `relational-context.json`, computed after packing so the text is unaffected): the store's chunk, commit, sentence and fact links, for the review packet and render's sentence coverage (see `docs/review-packet-design.md`). The writer never sees them.
 
 ## Schema
 

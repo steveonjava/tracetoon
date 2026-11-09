@@ -14,7 +14,7 @@
  * (turn_id); commits and prompts meet on time.
  */
 import type { GraphInputs } from './index.ts';
-import { chunkFile, normLine, parsePatch, type Chunk, type DiffFile } from './diff.ts';
+import { chunkPatch, normLine, type Chunk, type DiffFile } from './diff.ts';
 import { commitSentences, identWords, oneLine, RESULT_CLAIM } from './text.ts';
 import { openDb } from './sqlite.ts';
 
@@ -332,8 +332,7 @@ export function loadStore(inputs: GraphInputs): Loaded {
   insertAll(db, 'INSERT INTO edit_line VALUES (?,?)', editLineRows);
 
   // The diff: files, chunks, lines, symbols, identifiers, full-text index.
-  const files = parsePatch(inputs.patch);
-  const chunks: Chunk[] = [];
+  const { files, chunks } = chunkPatch(inputs.patch);
   insertAll(
     db,
     'INSERT INTO file VALUES (?,?,?,?,?,?,?,?,?)',
@@ -349,13 +348,6 @@ export function loadStore(inputs: GraphInputs): Loaded {
       f.removed,
     ]),
   );
-  files.forEach((f, i) => {
-    for (const c of chunkFile(f)) {
-      c.id = `H${chunks.length + 1}`;
-      chunks.push(c);
-      (c as Chunk & { fileId: string }).fileId = `F${i + 1}`;
-    }
-  });
   const chunkRows: unknown[][] = [];
   const lineRows: unknown[][] = [];
   const symRows: unknown[][] = [];
@@ -365,7 +357,7 @@ export function loadStore(inputs: GraphInputs): Loaded {
     const body = chunkBody(c);
     chunkRows.push([
       c.id,
-      (c as Chunk & { fileId: string }).fileId,
+      c.fileId,
       i,
       c.hunk,
       c.start,

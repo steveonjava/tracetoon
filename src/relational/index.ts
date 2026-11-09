@@ -38,6 +38,33 @@ export interface RelationalContext {
   tokens: number;
   /** Free-form build facts for the report (table sizes, retrieval settings, model). */
   stats?: Record<string, unknown>;
+  /**
+   * The store's links, kept for the review packet and render's coverage check
+   * (never shown to the writer): read by src/packet/evidence.ts.
+   */
+  links?: StoreLinks;
+}
+
+/** Links the relational store computed, by the ids the context and packet use. */
+export interface StoreLinks {
+  v: 1;
+  /** Every diff chunk, with what the store ties to it. */
+  chunks: {
+    id: string;
+    file: string;
+    start: number;
+    end: number;
+    /** Requests, decisions, plans and commit sentences tied to it, strongest first. */
+    why: string[];
+    /** For test chunks: names defined in other changed files that it uses, `name (H#)`. */
+    uses: string[];
+  }[];
+  /** Each commit and the chunks its own lines are in. */
+  commits: { id: string; subject: string; chunks: string[] }[];
+  /** Each commit-message sentence and the chunks (of its own commit) it is tied to. */
+  sentences: { id: string; text: string; result: boolean; chunks: string[] }[];
+  /** Requests, decisions and plans the builder weighed (noise and repeats dropped). */
+  facts: { id: string; kind: string; labels: string[]; text: string }[];
 }
 
 export interface BuildOptions {

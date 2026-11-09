@@ -20,6 +20,8 @@ export interface DiffLine {
   newNo?: number;
   /** Old-file line number (removed and context lines). */
   oldNo?: number;
+  /** One-based line number in the patch text (what `diff:N` cites). */
+  patchNo?: number;
 }
 
 export interface DiffHunk {
@@ -30,6 +32,8 @@ export interface DiffHunk {
   /** What git printed after the `@@` (the enclosing function or section). */
   ctx: string;
   lines: DiffLine[];
+  /** One-based patch line of the `@@` header. */
+  patchNo?: number;
 }
 
 export interface DiffFile {
@@ -91,24 +95,32 @@ export function parsePatch(patch: string): DiffFile[] {
     files.push(f);
     h = undefined;
   };
+  let patchNo = 0;
   for (const line of lines) {
+    patchNo++;
     if (h && (oldLeft > 0 || newLeft > 0)) {
       const c = line[0];
       if (c === '\\') continue;
       if (c === '+') {
-        h.lines.push({ sign: '+', text: line.slice(1), newNo: newNo++ });
+        h.lines.push({ sign: '+', text: line.slice(1), newNo: newNo++, patchNo });
         newLeft--;
         f!.added++;
         continue;
       }
       if (c === '-') {
-        h.lines.push({ sign: '-', text: line.slice(1), oldNo: oldNo++ });
+        h.lines.push({ sign: '-', text: line.slice(1), oldNo: oldNo++, patchNo });
         oldLeft--;
         f!.removed++;
         continue;
       }
       if (c === ' ' || line === '') {
-        h.lines.push({ sign: ' ', text: line.slice(1), newNo: newNo++, oldNo: oldNo++ });
+        h.lines.push({
+          sign: ' ',
+          text: line.slice(1),
+          newNo: newNo++,
+          oldNo: oldNo++,
+          patchNo,
+        });
         oldLeft--;
         newLeft--;
         continue;
@@ -143,6 +155,7 @@ export function parsePatch(patch: string): DiffFile[] {
           newLen: m[4] === undefined ? 1 : +m[4],
           ctx: m[5]!.trim(),
           lines: [],
+          patchNo,
         };
         f.hunks.push(h);
         oldLeft = h.oldLen;
@@ -296,6 +309,20 @@ export function chunkFile(file: DiffFile): Chunk[] {
     }
   });
   return out;
+}
+
+/** A patch's files and chunks, with chunk ids (H1, H2… in file and position order) and file ids (F1…). */
+export function chunkPatch(patch: string): {
+  files: DiffFile[];
+  chunks: (Chunk & { fileId: string })[];
+} {
+  const files = parsePatch(patch);
+  const chunks: (Chunk & { fileId: string })[] = [];
+  files.forEach((f, i) => {
+    for (const c of chunkFile(f))
+      chunks.push(Object.assign(c, { id: `H${chunks.length + 1}`, fileId: `F${i + 1}` }));
+  });
+  return { files, chunks };
 }
 
 /** The normalized form of a line, as session edits and commit lines carry it. */

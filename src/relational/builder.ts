@@ -16,6 +16,7 @@ import type {
   ContextRef,
   GraphInputs,
   RelationalContext,
+  StoreLinks,
 } from './index.ts';
 import { initSqlWasm } from './sqlite.ts';
 import { cosine, embeddingError, embeddingModel, initEmbeddings } from './embed.ts';
@@ -483,6 +484,7 @@ export function buildRelationalContext(
       ).map((r) => r.id as string),
     );
     const seenText = new Set<string>();
+    const weighed: StoreLinks['facts'] = [];
     for (const f of facts) {
       const id = f.id as string;
       const text = String(f.text ?? '');
@@ -521,6 +523,7 @@ export function buildRelationalContext(
         afterHead.has(id) ? 'after the last commit' : '',
         multiSession && firstAsk.has(id) ? `session ${f.sord}` : '',
       ].filter(Boolean);
+      weighed.push({ id, kind: String(f.kind), labels, text: clip(text, 1500) });
       const targets = targetsOf(id, true);
       // Markdown emphasis and heading marks cost characters and say nothing.
       const plain = text.replace(/^\s*#{1,6}\s+/gm, '').replace(/\*\*|__/g, '');
@@ -685,10 +688,40 @@ export function buildRelationalContext(
       seen.add(id);
       refs.push({ id, text: refText.get(id)! });
     }
+    // ---- Links for the review packet and coverage (not part of the text) --
+    const links: StoreLinks = {
+      v: 1,
+      chunks: chunks.map((c) => ({
+        id: c.id,
+        file: c.file,
+        start: c.start,
+        end: c.end,
+        why: (reasons.get(c.id) ?? []).map((r) => r.src).slice(0, 4),
+        uses: (testUses.get(c.id) ?? []).map((u) => `${u.name} (${u.chunk})`).slice(0, 6),
+      })),
+      commits: commits.map((k) => ({
+        id: `commit:${k.ref}`,
+        subject: String(k.subject),
+        chunks: chunksOfCommit.get(`commit:${k.ref}`) ?? [],
+      })),
+      sentences: rows(db, 'SELECT * FROM commit_sentence ORDER BY sha, n')
+        .map((s) => ({
+          id: String(s.id),
+          text: String(s.text),
+          result: !!s.result,
+          chunks: targetsOf(String(s.id)).slice(0, 3),
+          ord: commits.findIndex((k) => k.sha === s.sha),
+          n: Number(s.n),
+        }))
+        .sort((a, b) => a.ord - b.ord || a.n - b.n)
+        .map(({ ord: _o, n: _n, ...s }) => s),
+      facts: weighed,
+    };
     const t1 = performance.now();
     return {
       text,
       refs,
+      links,
       tokens: Math.ceil(text.length / 4),
       stats: {
         budgetTokens: opts.budgetTokens,
