@@ -12,7 +12,8 @@ import {
   type SessionMatch,
 } from '../correlate/correlate.ts';
 import type { PrTruth } from '../git/pr.ts';
-import type { Usage } from '../trace/types.ts';
+import type { ReadRecord, TraceRecord, Usage } from '../trace/types.ts';
+import { shellReads } from '../trace/reads.ts';
 import { clip, makeScrubber, type Scrubber } from './sanitize.ts';
 import { TOOL_VERSION } from '../version.ts';
 import { detectInterop, type Interop } from '../git/interop.ts';
@@ -490,11 +491,84 @@ export type TrailEvent =
       added: number;
       removed: number;
       via?: 'shell';
+    }
+  | {
+      /** A file read or a search (SQLite extras only; never affects the digest). */
+      kind: 'read';
+      t?: string;
+      tool: string;
+      /** Repo-relative, redacted; '.' for the whole repo. */
+      file: string;
+      pattern?: string;
+      inPr: boolean;
+    }
+  | {
+      /** Tokens one model response used (SQLite extras only). */
+      kind: 'usage';
+      t?: string;
+      input: number;
+      output: number;
+      cacheRead: number;
+      cacheWrite: number;
     };
+
+/** When a trail event happened. */
+export const trailTime = (e: TrailEvent): string | undefined =>
+  e.kind === 'edit' || e.kind === 'read' || e.kind === 'usage' ? e.t : e.fact.t;
 
 export interface SessionTrail {
   ref: string;
   events: TrailEvent[];
+}
+
+/**
+ * Put the session's reads into its trail in time order, keeping only those in
+ * the repo and inside the span of the records that belong to this PR.
+ */
+function mergeReads(
+  trail: TrailEvent[],
+  reads: ReadRecord[],
+  recs: TraceRecord[],
+  where: (abs: string) => { file: string; inPr: boolean } | undefined,
+  pattern: (p: string) => string,
+): void {
+  const times = recs
+    .map((r) => r.ts)
+    .filter((t): t is string => !!t)
+    .sort();
+  if (!reads.length || !times.length) return;
+  const [from, to] = [times[0]!, times[times.length - 1]!];
+  const events: {
+    kind: 'read';
+    t: string;
+    tool: string;
+    file: string;
+    inPr: boolean;
+    pattern?: string;
+  }[] = [];
+  for (const r of reads) {
+    if (!r.ts || !r.path || r.ts < from || r.ts > to) continue;
+    const at = where(r.path);
+    if (!at) continue;
+    events.push({
+      kind: 'read',
+      t: r.ts,
+      tool: r.tool,
+      ...at,
+      ...(r.pattern ? { pattern: pattern(r.pattern) } : {}),
+    });
+  }
+  if (!events.length) return;
+  events.sort((a, b) => a.t.localeCompare(b.t));
+  const merged: TrailEvent[] = [];
+  let i = 0;
+  for (const e of trail) {
+    const t = trailTime(e);
+    while (t && i < events.length && events[i]!.t < t) merged.push(events[i++]!);
+    merged.push(e);
+  }
+  merged.push(...events.slice(i));
+  trail.splice(0, trail.length, ...merged);
 }
 
 function sessionDigest(
@@ -523,6 +597,7 @@ function sessionDigest(
   const files = new Set<string>();
   let testFailedEarlier = false;
   let current: { ledToEdits: boolean } | undefined;
+  const shellReadsOf: ReadRecord[] = [];
 
   for (const r of recs) {
     if (r.model && !r.model.startsWith('<')) models.add(r.model);
@@ -553,6 +628,7 @@ function sessionDigest(
         usage.cacheRead += r.usage.cacheRead;
         usage.cacheWrite += r.usage.cacheWrite;
         sawUsage = true;
+        trail.push({ kind: 'usage', t: r.ts, ...r.usage });
         break;
       case 'plan': {
         const plan = {
@@ -613,6 +689,7 @@ function sessionDigest(
         break;
       }
       case 'command': {
+        if (!r.isError) shellReadsOf.push(...shellReads(r.cmd, r.cwd, r.ts));
         for (const run of commandRuns(r.cmd, r.isError, r.output)) {
           const fact: Run = {
             t: r.ts,
@@ -651,6 +728,18 @@ function sessionDigest(
         break;
     }
   }
+  mergeReads(
+    trail,
+    [...(m.session.reads ?? []), ...shellReadsOf],
+    recs,
+    (abs) => {
+      const rel = repoRel({ roots: m.roots }, abs);
+      return rel === undefined
+        ? undefined
+        : { file: scrub.text(rel || '.'), inPr: prSets.has(rel) };
+    },
+    (t) => clip(scrub.text(t), 80),
+  );
   // Relate each run to later edits of files in the PR (never certifies a revision).
   const prEditTimes = recs
     .filter((r) => r.kind === 'edit' && r.ts)
@@ -933,7 +1022,7 @@ function buildFullDigest(
     // A resumed session repeats its parent's prompts; point its events at the kept copy.
     for (const t of trails)
       for (const e of t.events)
-        if (e.kind !== 'edit' && alias.has(e.fact))
+        if ('fact' in e && alias.has(e.fact))
           (e as { fact: object }).fact = alias.get(e.fact)!;
     opts.trails.push(...trails);
   }

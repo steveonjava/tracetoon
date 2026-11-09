@@ -23,11 +23,14 @@ function setup() {
     ANTIGRAVITY_HOME: tempDir('tracetoon-gemini-'),
     GEMINI_HOME: tempDir('tracetoon-gemini-'),
     TRACETOON_CONFIG: join(tempDir('tracetoon-env-'), 'config.json'),
+    // The SQLite store's own CLI tests (cypherlite is this branch's default).
+    TRACETOON_EVIDENCE_ENGINE: 'sqlite',
   };
-  const cli = (cwd: string, ...args: string[]) => {
+  const cli = (cwd: string, ...args: string[]) => cliWith({}, cwd, ...args);
+  const cliWith = (extra: Record<string, string>, cwd: string, ...args: string[]) => {
     const r = spawnSync(PROGRAM[0]!, [...PROGRAM.slice(1), ...args], {
       cwd,
-      env,
+      env: { ...env, ...extra },
       encoding: 'utf8',
       windowsHide: true,
     });
@@ -39,7 +42,7 @@ function setup() {
     }
     return { code: r.status, json, stdout: r.stdout, stderr: r.stderr };
   };
-  return { claudeHome, cli };
+  return { claudeHome, cli, cliWith };
 }
 
 const GREET =
@@ -151,5 +154,109 @@ describe('sqlite evidence store', () => {
     expect(graph.nodes.some((n) => n.label === 'Change')).toBe(true);
     expect(graph.nodes.some((n) => n.label === 'Plan')).toBe(true);
     expect(compareEngines(graph)).toEqual([]);
+  });
+
+  test('extras: reads, fail-to-pass fixes, effort and search, shown only with the flag', () => {
+    const { claudeHome, cli, cliWith } = setup();
+    const repo = makeRepo();
+    new ClaudeLog(repo.root)
+      .prompt('Add a greet helper that says hello by name')
+      .read(join(repo.root, 'src/util.ts'))
+      .grep('formatName', join(repo.root, 'src'))
+      .bash('cat README.md && sed -n 1,20p src/names.ts', 'readme')
+      .write(join(repo.root, 'src/greet.ts'), 'export const greet = 1;\n')
+      .bash('bun test', '0 pass\n1 fail', true)
+      .write(join(repo.root, 'src/greet.ts'), GREET)
+      .bash('bun test', '1 pass\n0 fail')
+      .reply('Done: greet says hello.')
+      .save(claudeHome, 'extras');
+    mkdirSync(join(repo.root, 'src'), { recursive: true });
+    writeFileSync(join(repo.root, 'src/greet.ts'), GREET);
+    git(repo.root, ['add', '.']);
+    git(repo.root, ['commit', '-q', '-m', 'feat: greet']);
+    const r = cli(repo.root, '--json', 'digest', '--offline');
+    expect(r.code).toBe(0);
+    const graph: EvidenceGraph = JSON.parse(
+      readFileSync(join(r.json.runDir, 'evidence-graph.json'), 'utf8'),
+    );
+    expect(graph.extras?.reads.map((x) => [x.tool, x.file, x.pattern])).toEqual([
+      ['Read', 'src/util.ts', null],
+      ['Grep', 'src', 'formatName'],
+      ['shell:cat', 'README.md', null],
+      ['shell:sed', 'src/names.ts', null],
+    ]);
+    expect(graph.extras?.reads.every((x) => x.prompt === 'S1')).toBe(true);
+    // Extras never change what both engines answer.
+    expect(compareEngines(graph)).toEqual([]);
+
+    const titles = (b: any) => b.json.sections.map((x: any) => x.title);
+    const plain = cli(repo.root, '--json', 'query', 'brief', '--run', r.json.run);
+    expect(titles(plain)).not.toContain('context');
+    const on = { TRACETOON_SQLITE_EXTRAS: '1' };
+    const b = cliWith(on, repo.root, '--json', 'query', 'brief', '--run', r.json.run);
+    const sec = (t: string) => b.json.sections.find((x: any) => x.title === t)?.rows;
+    expect(sec('context')).toEqual([
+      {
+        ref: 'X1',
+        for: 'CH1',
+        read: ['README.md', 'src/names.ts', 'src/util.ts'],
+        searched: ['formatName in src'],
+        turns: ['S1'],
+      },
+    ]);
+    expect(sec('fixes')).toMatchObject([
+      { ref: 'F1', cmd: 'bun test', failed: 'R1', passed: 'R2', files: ['src/greet.ts'] },
+    ]);
+    expect(sec('fixes')[0].fixedBy).toHaveLength(1);
+    expect(sec('effort')).toMatchObject([
+      { change: 'CH1', turns: 1, deadEnds: 1, runs: 2 },
+    ]);
+    expect(
+      sec('extraRules').some((x: any) => x.rule.startsWith('context rows (X#)')),
+    ).toBe(true);
+
+    const found = cli(
+      repo.root,
+      '--json',
+      'query',
+      'search',
+      'hello',
+      '--run',
+      r.json.run,
+    );
+    expect(found.json.sections[0].rows[0]).toMatchObject({ id: 'S1', kind: 'Prompt' });
+    const cycles = cli(
+      repo.root,
+      '--json',
+      'query',
+      '--sql',
+      'SELECT failed_run, passed_run FROM run_cycles',
+      '--run',
+      r.json.run,
+    );
+    expect(cycles.json.sections[0].rows).toEqual([
+      { failed_run: 'R1', passed_run: 'R2' },
+    ]);
+  });
+});
+
+describe('shell reads', () => {
+  const { shellReads } =
+    require('../src/trace/reads.ts') as typeof import('../src/trace/reads.ts');
+  const of = (cmd: string) =>
+    shellReads(cmd, '/r').map((r) => [r.tool, r.path, r.pattern ?? null]);
+  test('read-only commands become reads; writes and in-place edits do not', () => {
+    expect(of('cd sub && cat a.ts | head -5')).toEqual([
+      ['shell:cat', '/r/sub/a.ts', null],
+    ]);
+    expect(of('sed -n 10,20p src/x.ts')).toEqual([['shell:sed', '/r/src/x.ts', null]]);
+    expect(of("rg -n 'foo bar' src tests")).toEqual([
+      ['shell:rg', '/r/src', 'foo bar'],
+      ['shell:rg', '/r/tests', 'foo bar'],
+    ]);
+    expect(of('grep -r needle')).toEqual([['shell:grep', '/r', 'needle']]);
+    expect(of('sed -i s/a/b/ x.ts')).toEqual([]);
+    expect(of('cat a.ts > b.ts')).toEqual([]);
+    expect(of('bun test 2>&1')).toEqual([]);
   });
 });

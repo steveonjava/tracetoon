@@ -8,6 +8,7 @@
  */
 import { GraphError } from '../graph/db.ts';
 import type { EvidenceGraph, NodeLabel, RelType, Value } from '../graph/model.ts';
+import { loadExtras } from './extras.ts';
 
 interface Exec {
   exec(sql: string): void;
@@ -233,6 +234,7 @@ export function loadEvidence(db: Exec, graph: EvidenceGraph): ColumnKinds {
         ...(spec.props ?? []).map((p) => cell(r.props?.[p])),
       ]);
     }
+    loadExtras(db, graph);
     insert('meta', ['key', 'value'], ['schema', graph.schema]);
     insert('meta', ['key', 'value'], ['kinds', JSON.stringify(kinds)]);
     db.exec('COMMIT');

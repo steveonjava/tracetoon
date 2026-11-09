@@ -164,6 +164,18 @@ export class ClaudeLog {
       },
     );
   }
+  /** A Read tool call. */
+  read(filePath: string): this {
+    return this.tool('Read', { file_path: filePath }, { content: '1\tcontents' });
+  }
+  /** A Grep tool call. */
+  grep(pattern: string, path?: string): this {
+    return this.tool(
+      'Grep',
+      { pattern, ...(path ? { path } : {}) },
+      { content: 'src/a.ts' },
+    );
+  }
   bash(command: string, stdout = '', isError = false, tool = 'Bash'): this {
     return this.tool(
       tool,
