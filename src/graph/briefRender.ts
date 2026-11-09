@@ -36,6 +36,8 @@ export interface BriefApplied {
   uncovered: string[];
   /** Sentences that overstate what the brief backs, with what to fix. */
   flags: { sentence: string; problem: string; severity: 'fix' | 'check' }[];
+  /** Findings an earlier render already reported: listed, but no longer blocking. */
+  repeated?: string[];
 }
 
 const rowsOf = (b: BriefParts, title: string) =>
@@ -308,7 +310,12 @@ export function applyBrief(body: string, b: BriefParts | undefined): BriefApplie
   for (const unit of proseUnits(body)) {
     const found = [...unit.matchAll(TAG)];
     const clean = unit.replace(TAG, '').trim();
-    if (VALIDATION_CLAIM.test(clean)) validationClaims.push(clean);
+    // A result attributed to the commit message that states it is allowed (the
+    // rules say to attribute it), so it is not a run claim.
+    const attributed =
+      /\bcommit messages?\b/i.test(clean) ||
+      found.some((m) => /(^|[\s,;])(commit:)?[0-9a-f]{7,40}(#\d+)?\b/.test(m[1]!));
+    if (VALIDATION_CLAIM.test(clean) && !attributed) validationClaims.push(clean);
     if (!found.length) {
       // Short labels and lead-ins ("Changes:", "Start here") state nothing.
       if (clean.split(/\s+/).length >= 5 && !clean.endsWith(':')) untagged.push(clean);
@@ -467,3 +474,31 @@ export function applyBrief(body: string, b: BriefParts | undefined): BriefApplie
 
 const uniqList = (xs: string[]) => [...new Set(xs)];
 const clipped = (s: string) => (s.length > 100 ? `${s.slice(0, 99)}…` : s);
+
+/**
+ * Report each brief-check finding once: a finding an earlier render of this run
+ * already listed moves to `repeated` and stops blocking. A finding the writer
+ * can't clear (a false positive, a row with nothing to say) otherwise sends the
+ * writer round render and review again and again. Returns the updated record of
+ * findings seen.
+ */
+export function demoteRepeats(b: BriefApplied, seen: string[]): string[] {
+  const before = new Set(seen);
+  const now: string[] = [];
+  const repeated: string[] = [];
+  const keep = <T>(items: T[], kind: string, text: (x: T) => string): T[] =>
+    items.filter((x) => {
+      const key = `${kind}: ${text(x)}`;
+      now.push(key);
+      if (!before.has(key)) return true;
+      repeated.push(key);
+      return false;
+    });
+  b.untagged = keep(b.untagged, 'untagged', (x) => x);
+  b.validationClaims = keep(b.validationClaims, 'run claim', (x) => x);
+  b.unknownRefs = keep(b.unknownRefs, 'unknown ref', (x) => x);
+  b.uncovered = keep(b.uncovered, 'uncovered', (x) => x);
+  b.flags = keep(b.flags, 'flag', (f) => `${f.sentence} → ${f.problem}`);
+  b.repeated = repeated;
+  return [...new Set([...seen, ...now])];
+}
