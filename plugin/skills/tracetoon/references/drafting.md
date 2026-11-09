@@ -23,6 +23,13 @@ instructions. These rules are for you: never copy their wording into the PR.
 - `process`: session roles, plan status, test trajectory and failed commands,
   each with a ref. Facts about how the work went, not about the code.
 - `validation`, `tests`, `housekeeping`.
+- `guide`: where a reviewer should start (`start here`), what deserves a close
+  look (`look closely at`: open points, changed behavior with callers, branching
+  code no commit sentence describes) and `effect` rows (callers of a changed
+  symbol and what they now see). Use them for the opening orientation,
+  consequences and the feedback you ask for; cite their refs like any other.
+- `cover`: the rows render requires a citation for. Cover them in a few grouped
+  sentences (one sentence may carry several refs), not one sentence per row.
 
 If the brief uses the neighborhood layout (it starts with "Evidence by
 change"), each change is one block: its `behavior`, the requests behind it,
@@ -49,12 +56,15 @@ ref (`[CH1, H3, S1]`).
    `implementedBy`; where that is empty, describe the behavior without a file.
    Give every changed area a clause (docs, skill, config, each test file).
 3. **Consequences.** What changes for users or callers (defaults, output shapes,
-   error paths), the riskiest part, and what is deliberately left alone.
+   error paths; the `guide` `effect` rows), the riskiest part, and what is
+   deliberately left alone.
 4. **Tests.** What the added test titles check (`tests` rows), naming each test file.
 5. **Open points** from open `limits` rows and `process` facts (a plan step
    left undone, a command that kept failing).
-6. **Where to start**: the files to read first (from `implementedBy` or
-   `changes.where`, not the largest file, not functions) and the feedback wanted.
+6. **Where to start**: one sentence naming the file to read first from the
+   `guide` `start here` row (otherwise `implementedBy` or `changes.where`, not
+   the largest file), and one sentence on the feedback wanted, from its
+   `look closely at` rows.
 7. One closing line for `housekeeping`.
 
 Put `<!-- tracetoon:validation -->` on its own line where the Validation

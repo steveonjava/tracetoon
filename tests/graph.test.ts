@@ -247,6 +247,29 @@ describe('evidence graph', () => {
     expect(v.map((x: any) => [x.cmd, x.outcome])).toEqual([['bun test', 'passed']]);
   });
 
+  test('the reviewer guide says where to start, and the cover line what render requires', () => {
+    const prev = process.env.TRACETOON_BRIEF_GUIDE;
+    process.env.TRACETOON_BRIEF_GUIDE = 'on';
+    try {
+      const { repo, cli } = scenario();
+      const r = cli(repo.root, '--json', 'digest', '--offline');
+      const b = cli(repo.root, '--json', 'query', 'brief', '--run', r.json.run);
+      const titles = b.json.sections.map((x: any) => x.title);
+      expect(titles).toContain('guide');
+      expect(titles).toContain('cover');
+      expect(titles).not.toContain('coverage');
+      const guide = b.json.sections.find((x: any) => x.title === 'guide').rows;
+      expect(guide[0].kind).toBe('start here');
+      expect(guide.every((g: any) => /^G\d+$/.test(g.ref))).toBe(true);
+      const cover = b.json.sections.find((x: any) => x.title === 'cover').rows[0].rule;
+      expect(cover).toContain('CH1');
+      expect(cover).toContain('grouped sentences');
+    } finally {
+      if (prev === undefined) delete process.env.TRACETOON_BRIEF_GUIDE;
+      else process.env.TRACETOON_BRIEF_GUIDE = prev;
+    }
+  });
+
   test('the brief groups changes, scopes reasons and dates checks', () => {
     const { repo, cli } = scenario();
     const r = cli(repo.root, '--json', 'digest', '--offline');

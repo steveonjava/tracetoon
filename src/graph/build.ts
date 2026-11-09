@@ -317,8 +317,21 @@ export function keyCodeLines(minus: string[], plus: string[], max = KEY_LINES): 
       });
     }
   });
+  // An added comment that explains (a reason, a workaround, a caveat) ranks with
+  // definitions: it is often the only place the patch says why (guide.ts).
+  const why = (l: string) =>
+    process.env.TRACETOON_BRIEF_GUIDE !== 'off' &&
+    isComment(l) &&
+    (l.replace(/^\s*(\/\/|#|\*|\/\*|--)\s*/, '').split(/\s+/).length >= 6 ||
+      /\b(because|so that|otherwise|workaround|TODO|NOTE|FIXME|XXX)\b/.test(l));
   const rankOf = (l: string) =>
-    low(l) ? 3 : definedSymbol(l) || (BRANCHING.test(l) && !isComment(l)) ? 1 : 2;
+    why(l)
+      ? 1
+      : low(l)
+        ? 3
+        : definedSymbol(l) || (BRANCHING.test(l) && !isComment(l))
+          ? 1
+          : 2;
   plus.forEach((a, j) => {
     if (!usedPlus.has(j))
       cands.push({ order: j, text: `+ ${clipCode(a)}`, rank: rankOf(a) });

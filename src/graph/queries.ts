@@ -14,6 +14,7 @@ import {
   HISTORY_KINDS,
 } from './runHistory.ts';
 import { isNeighborhood, type BriefLayout } from './layout.ts';
+import { coverageRows, coverLine, guideEnabled, guideRows } from './guide.ts';
 
 export interface Section {
   title: string;
@@ -836,7 +837,8 @@ function processRows(
  * its evidence; nothing in it is inferred beyond the graph.
  */
 export function brief(g: GraphEngine): Section[] {
-  return briefParts(g).sections;
+  // `coverage` rows are for render's check, not for the writer.
+  return briefParts(g).sections.filter((s) => s.title !== 'coverage');
 }
 
 /**
@@ -1350,6 +1352,20 @@ export function briefParts(
     0,
     section('doNotSay', DO_NOT_SAY_COLUMNS, doNotSayRows(sections, uniq(branchy).sort())),
   );
+  // The reviewer guide, coverage aids and the cover line (guide.ts).
+  if (guideEnabled()) {
+    const guide = guideRows({ g, sections, hunkRows, hunkLinks, fileRole });
+    sections.splice(2, 0, section('guide', ['ref', 'kind', 'text', 'cites'], guide));
+    const cover = coverLine(sections);
+    if (cover) sections.push(section('cover', ['rule'], [{ rule: cover }]));
+    sections.push(
+      section(
+        'coverage',
+        ['ref', 'coveredBy'],
+        coverageRows(sections, hunkRows, hunkLinks),
+      ),
+    );
+  }
   return {
     sections,
     unchecked: uniq(uncheckedAll).sort(),
