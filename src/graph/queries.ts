@@ -34,6 +34,9 @@ export interface NamedQuery {
 }
 
 const CHECK_KINDS = ['test', 'build', 'typecheck', 'lint', 'eval'];
+// SQL forms order rows as cypherlite returns them where the TypeScript keeps
+// that order: nodes in load order (rowid), relationships newest first (link
+// rowid DESC). Elsewhere the TypeScript sorts and SQL order is irrelevant.
 const uniq = <T>(xs: T[]) => [...new Set(xs)];
 const byDiff = (a: string, b: string) =>
   Number(/\d+/.exec(a)?.[0] ?? 0) - Number(/\d+/.exec(b)?.[0] ?? 0);

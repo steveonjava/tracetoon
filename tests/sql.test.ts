@@ -149,6 +149,77 @@ describe('sqlite evidence store', () => {
     expect(() => SqlEngine.load(graph)).toThrow(/novel/);
   });
 
+  test("rows come back in the graph engine's order where the brief keeps it", () => {
+    // Relationships are walked newest first by cypherlite; symbol lists in limits,
+    // implementedBy ties and a commit's sessions keep that order.
+    const H = (id: string, file: string, sym: string, diff: string) =>
+      N('Hunk', id, {
+        file,
+        start: 1,
+        end: 2,
+        added: 2,
+        removed: 0,
+        diff,
+        context: null,
+        scope: null,
+        symbols: [sym],
+        touched: [sym],
+        branches: 1,
+        fresh: [],
+        pairs: [],
+        tests: [],
+        words: ['shared', 'word', sym.toLowerCase()],
+      });
+    const F = (id: string) =>
+      N('File', id, { role: 'behavior', inPr: true, added: 2, removed: 0, unmatched: 0 });
+    const graph: EvidenceGraph = {
+      schema: GRAPH_SCHEMA,
+      nodes: [
+        F('src/a.ts'),
+        F('src/b.ts'),
+        H('H1', 'src/a.ts', 'Alpha', 'diff:1-3'),
+        H('H2', 'src/b.ts', 'Beta', 'diff:5-7'),
+        N('Session', 'h:1', { band: 'included', agent: 'a', score: 1, title: null }),
+        N('Session', 'h:2', { band: 'included', agent: 'a', score: 1, title: null }),
+        N('Commit', 'abcdef123456', {
+          subject: 'shared word change',
+          body: 'Shared word here.',
+          t: '5',
+        }),
+        N('CommitClaim', 'abcdef123456#1', {
+          commit: 'abcdef123456',
+          text: 'Shared word here.',
+          assertsResult: false,
+        }),
+        N('Change', 'CH1', {
+          key: 'dir:src',
+          files: ['src/a.ts', 'src/b.ts'],
+          roles: ['behavior'],
+          symbols: ['Alpha', 'Beta'],
+          added: 4,
+          removed: 0,
+          branches: 2,
+        }),
+      ],
+      rels: [
+        R('OF', ['Hunk', 'H1'], ['File', 'src/a.ts']),
+        R('OF', ['Hunk', 'H2'], ['File', 'src/b.ts']),
+        R('TOUCHES', ['Commit', 'abcdef123456'], ['File', 'src/a.ts']),
+        R('TOUCHES', ['Commit', 'abcdef123456'], ['File', 'src/b.ts']),
+        R('INTRODUCED', ['Commit', 'abcdef123456'], ['Hunk', 'H1'], { lines: 2 }),
+        R('INTRODUCED', ['Commit', 'abcdef123456'], ['Hunk', 'H2'], { lines: 2 }),
+        R('SAYS', ['Commit', 'abcdef123456'], ['CommitClaim', 'abcdef123456#1']),
+        R('MADE', ['Session', 'h:1'], ['Commit', 'abcdef123456']),
+        R('MADE', ['Session', 'h:2'], ['Commit', 'abcdef123456']),
+        R('HAS', ['Change', 'CH1'], ['Hunk', 'H1']),
+        R('HAS', ['Change', 'CH1'], ['Hunk', 'H2']),
+        R('EXPLAINED_BY', ['Change', 'CH1'], ['Commit', 'abcdef123456']),
+      ],
+      stats: { nodes: 9, rels: 12, hunks: 2, linkedHunks: 0, edits: 0, deadEndEdits: 0 },
+    };
+    expect(compareEngines(graph)).toEqual([]);
+  });
+
   test('both engines answer every named question the same way', () => {
     const graph = graphFromScenario();
     expect(graph.nodes.some((n) => n.label === 'Change')).toBe(true);
