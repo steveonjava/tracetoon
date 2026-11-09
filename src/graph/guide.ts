@@ -62,19 +62,28 @@ export function guideRows(input: GuideInput): Row[] {
     x.by.set(str(r.prompt), (x.by.get(str(r.prompt)) ?? 0) + Number(r.lines ?? 0));
     surv.set(str(r.hunk), x);
   }
-  // Callers at the head commit: how many other files name a symbol the hunk changes.
-  const callers = new Map<string, { files: number; term: string }>();
+  // Callers at the head commit: how many other files name a symbol the hunk
+  // defines or changes (HeadRef reference rows are keyed by the symbol's name).
+  const termFiles = new Map<string, number>();
   try {
     for (const r of g.run(
-      `MATCH (x:HeadRef) WHERE x.kind <> 'still mentions'
-       RETURN x.hunk AS hunk, x.term AS term, x.files AS files`,
-    ).rows) {
-      const prev = callers.get(str(r.hunk));
-      if (!prev || Number(r.files) > prev.files)
-        callers.set(str(r.hunk), { files: Number(r.files ?? 0), term: str(r.term) });
-    }
+      `MATCH (x:HeadRef) WHERE x.kind <> 'still mentions' RETURN x.term AS term, x.files AS files`,
+    ).rows)
+      termFiles.set(
+        str(r.term),
+        Math.max(termFiles.get(str(r.term)) ?? 0, Number(r.files ?? 0)),
+      );
   } catch {
     // No head scan in this graph: no caller weights.
+  }
+  const callers = new Map<string, { files: number; term: string }>();
+  for (const h of hunkRows) {
+    let best: { files: number; term: string } | undefined;
+    for (const t of [...list(h.fresh), ...list(h.symbols)]) {
+      const n = termFiles.get(t) ?? 0;
+      if (n && (!best || n > best.files)) best = { files: n, term: t };
+    }
+    if (best) callers.set(str(h.hunk), best);
   }
   const roleOf = (f: string) => fileRole.get(f) ?? '';
   const described = new Set(Object.values(hunkLinks).flat());
