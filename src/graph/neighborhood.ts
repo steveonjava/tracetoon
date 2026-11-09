@@ -59,6 +59,9 @@ export function renderNeighborhood(
   }
   const chosen = pack(lines, budgetChars);
   const out = lines.filter((l) => !l.hunk || chosen.has(l)).map((l) => l.text);
+  // The rows render will require a tagged sentence for, so the first draft covers them.
+  const checklist = coverageChecklist(sections);
+  if (checklist) out.push(checklist);
   const toon = (titles: string[]) =>
     toToon(sections.filter((s) => titles.includes(s.title) && s.rows.length)).trimEnd();
   return [
@@ -275,4 +278,43 @@ function pack(lines: Line[], budgetChars: number): Set<Line> {
     perChange.set(best.change!, (perChange.get(best.change!) ?? 0) + 1);
   }
   return chosen;
+}
+
+/**
+ * One line naming every brief row render's coverage check requires (the same
+ * rows `applyBrief` reports as uncovered), with what else covers each.
+ */
+export function coverageChecklist(sections: Section[]): string | undefined {
+  const rows = (t: string): Row[] => sections.find((s) => s.title === t)?.rows ?? [];
+  const parts: string[] = [];
+  const changes = rows('changes').map((r) => str(r.change));
+  if (changes.length) parts.push(`${changes.join(' ')} (or one of its hunks)`);
+  const byCommit = new Map<string, string[]>();
+  for (const r of rows('commitMessages')) {
+    const ref = str(r.ref);
+    const text = str(r.text);
+    if (!ref.includes('#') || text.split(/\s+/).length < 4 || text.endsWith(':'))
+      continue;
+    const [sha, n] = ref.split('#');
+    byCommit.set(sha!, [...(byCommit.get(sha!) ?? []), `#${n}`]);
+  }
+  for (const [sha, ns] of byCommit)
+    parts.push(
+      `${sha.replace(/^commit:/, '').slice(0, 12)} ${ns.join(' ')} (or the hunk a sentence points to)`,
+    );
+  const tests = rows('tests').map((r) => str(r.ref));
+  if (tests.length) parts.push(tests.join(' '));
+  const hk = rows('housekeeping').map((r) => str(r.ref));
+  if (hk.length) parts.push(hk.join(' '));
+  const open = rows('limits')
+    .filter((r) => r.kind === 'open')
+    .map((r) => str(r.ref));
+  if (open.length) parts.push(`${open.join(' ')} (open points)`);
+  const goal = rows('requests')
+    .filter((r) => str(r.kind).startsWith('goal'))
+    .map((r) => str(r.ref));
+  if (goal.length) parts.push(`${goal.join(' ')} (the goal)`);
+  return parts.length
+    ? `Cover each with a tagged sentence (render checks these): ${parts.join(' · ')}.`
+    : undefined;
 }

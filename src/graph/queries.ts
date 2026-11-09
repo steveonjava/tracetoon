@@ -975,6 +975,34 @@ export function briefParts(g: GraphEngine): { sections: Section[]; unchecked: st
     section('commitMessages', ['ref', 'about', 'text', 'implementedBy'], commitText),
     ...(briefLayout() === 'neighborhood'
       ? [
+          // Which hunk citations also cover a row: a commit sentence by the hunks it
+          // describes, a change by its hunks, a tests row by its test file's hunks.
+          section(
+            'coverage',
+            ['ref', 'coveredBy'],
+            [
+              ...commitText
+                .map((r) => ({
+                  ref: r.ref,
+                  coveredBy: hunkSection
+                    .filter((h) => (h.sentences as string[]).includes(String(r.ref)))
+                    .map((h) => String(h.ref)),
+                }))
+                .filter((r) => r.coveredBy.length),
+              ...changeRows.map((c) => ({
+                ref: c.change,
+                coveredBy: hunkSection
+                  .filter((h) => h.change === c.change)
+                  .map((h) => String(h.ref)),
+              })),
+              ...tests.map((t) => ({
+                ref: t.ref,
+                coveredBy: hunkSection
+                  .filter((h) => h.file === t.file)
+                  .map((h) => String(h.ref)),
+              })),
+            ],
+          ),
           section(
             'hunks',
             [

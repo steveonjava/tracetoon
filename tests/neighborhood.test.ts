@@ -215,7 +215,11 @@ const sections = (codeLines: number): Section[] => [
   },
 ];
 
-const evidence = (text: string) => text.slice(text.indexOf('Evidence by change'));
+// The evidence blocks only: the coverage checklist sits outside the budget, like the rules.
+const evidence = (text: string) =>
+  text
+    .slice(text.indexOf('Evidence by change'))
+    .replace(/\nCover each with a tagged sentence[^\n]*/, '');
 
 describe('neighborhood brief', () => {
   test('every change gets a block, with its why, commit sentences, hunks and code', () => {
@@ -242,5 +246,26 @@ describe('neighborhood brief', () => {
 
   test('render accepts the hunk refs', () => {
     expect(briefRefs({ sections: sections(1), unchecked: [] }).has('H2')).toBe(true);
+  });
+});
+
+describe('coverage checklist', () => {
+  test('lists exactly the rows render requires', async () => {
+    const { coverageChecklist } = await import('../src/graph/neighborhood.ts');
+    const line = coverageChecklist([
+      ...sections(1),
+      {
+        title: 'limits',
+        columns: ['ref', 'change', 'kind', 'limit'],
+        rows: [
+          { ref: 'L1', change: null, kind: 'open', limit: 'x' },
+          { ref: 'L2', change: 'CH1', kind: 'instruction', limit: 'y' },
+        ],
+      },
+    ]);
+    expect(line).toContain('CH1 CH2');
+    expect(line).toContain('abc123abc123 #1');
+    expect(line).toContain('L1 (open points)');
+    expect(line).not.toContain('L2');
   });
 });

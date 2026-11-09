@@ -424,9 +424,24 @@ export function applyBrief(body: string, b: BriefParts | undefined): BriefApplie
       );
     });
   };
+  // A row is also covered by citing any ref its arm says stands for it (a hunk a
+  // commit sentence describes, a change's hunks): the `coverage` section.
+  const coveredBy = new Map<string, string[]>();
+  for (const r of rowsOf(b, 'coverage'))
+    coveredBy.set(
+      String(r.ref ?? '').replace(/^commit:/, ''),
+      (r.coveredBy as string[]) ?? [],
+    );
+  const plainCited = cited;
+  const citedOrCovered = (ref: unknown) =>
+    plainCited(ref) ||
+    (coveredBy.get(String(ref ?? '').replace(/^commit:/, '')) ?? []).some((x) =>
+      plainCited(x),
+    );
   const uncovered: string[] = [];
   for (const r of changeRows)
-    if (!cited(r.change)) uncovered.push(`${String(r.change)}: ${list(r.where)}`);
+    if (!citedOrCovered(r.change))
+      uncovered.push(`${String(r.change)}: ${list(r.where)}`);
   for (const r of commitRows) {
     const text = String(r.text ?? '');
     if (
@@ -437,11 +452,11 @@ export function applyBrief(body: string, b: BriefParts | undefined): BriefApplie
       continue;
     // A sentence is covered by its own ref or by citing the whole commit.
     const whole = String(r.ref).split('#')[0];
-    if (!cited(r.ref) && !cited(whole))
+    if (!citedOrCovered(r.ref) && !plainCited(whole))
       uncovered.push(`${String(r.ref)}: ${clipped(text)}`);
   }
   for (const r of [...rowsOf(b, 'tests'), ...rowsOf(b, 'housekeeping')])
-    if (!cited(r.ref))
+    if (!citedOrCovered(r.ref))
       uncovered.push(`${String(r.ref)}: ${String(r.file ?? r.what ?? '')}`);
   // Open points: each deserves a sentence saying what the evidence leaves open.
   for (const r of rowsOf(b, 'limits'))

@@ -160,7 +160,10 @@ export function loadGraphReview(run: Run): GraphDerived['review'] | undefined {
  * Undefined when the graph can't be read; the digest never depends on it.
  */
 /** The brief as data, for `render` to write the Validation section and check ref tags. */
-export function graphBriefParts(graph: EvidenceGraph): BriefParts | undefined {
+export function graphBriefParts(
+  graph: EvidenceGraph,
+  _run?: unknown,
+): BriefParts | undefined {
   try {
     return withGraph(graph, (g) => briefParts(g));
   } catch {
