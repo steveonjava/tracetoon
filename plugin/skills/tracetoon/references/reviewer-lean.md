@@ -25,14 +25,10 @@ symbol's callers). Do not read other run files, the brief query, or guides.
    passing run recorded after the last commit" or "no request recorded for
    CHn": if the body omits it, kind `omission`; if it says the opposite
    ("tests pass", "as requested"), a claim `overstated`. Also omitted
-   branch-hunk behavior. A check-recognition limit says what Tracetoon
-   recognized in the logs, not what ran: flag a body that widens one ("no
-   tests were run", "untested", "not tested", a check kind the limit doesn't
-   name) as `overstated`, and never ask the drafter to widen one. An
-   environment-scope statement ("verified only with fakes", "tried only on
-   the session's OS") is not a widened limit: accept it when its tag points
-   to a brief row, commit sentence, test file or request that supports it;
-   flag it `unsupported` only when untagged or its tag doesn't back it. A
+   branch-hunk behavior. A limit says what Tracetoon recognized in the logs,
+   not what ran: flag a body that widens one ("no tests were run",
+   "untested", "not tried on <platform>", a check kind the limit doesn't
+   name) as `overstated`, and never ask the drafter to widen one. A
    body that says a session run with no edit after it is "not proven to
    cover" the committed content is `overstated` (it is historical, not
    disproven). A body that calls session runs current ("passes on the final commit")

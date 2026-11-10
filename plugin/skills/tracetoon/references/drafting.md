@@ -140,16 +140,11 @@ strips tags and lists untagged sentences and unknown refs.
   never write "on the final code" or "after all changes".
 - No recorded run is not "not tested": write "no recorded run", never "not
   tested", "not exercised" or "never ran".
-- A check-recognition limit says what Tracetoon recognized in the logs, not
-  what happened. State it in its own scope ("Tracetoon recognized no passing
-  check after the last captured edit of `x`") and never widen it: not to "no
-  tests were run", "untested", "not tested", "unverified locally", nor to a
-  check kind it doesn't name (a linter, a smoke test). This rule is about
-  check recognition only: an environment-scope statement ("verified only with
-  fakes", "tried only on the session's OS", "no run against the real
-  service") is fine when a brief row, a commit sentence, a test file or the
-  request supports it, with that tag ([T1], [S2], [commit:<sha>#1]). Untagged,
-  leave it out; never write "untested" or "not tested". When `otherRuns`
+- A limit says what Tracetoon recognized in the logs, not what happened. State
+  it in its own scope ("Tracetoon recognized no passing check after the last
+  captured edit of `x`") and never widen it: not to "no tests were run",
+  "untested", "unverified locally", "not tried on <hardware or platform>", nor
+  to a check kind it doesn't name (a linter, a smoke test). When `otherRuns`
   or the limit names commands that ran after the edit, say they ran, without
   a result. Never turn a limit into "no result" or "no captured result" for
   a command the Validation section shows: a limit about an earlier run of it
