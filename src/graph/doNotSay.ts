@@ -55,6 +55,11 @@ export function diffFiles(sections: Section[]): string[] {
       ...rowsOf(sections, 'housekeeping')
         .flatMap((r) => list(r.files))
         .filter((f) => !/^\+\d+ more$/.test(f)),
+      // Built output beside its changed source: a `bundle` process row cites it.
+      ...rowsOf(sections, 'process')
+        .filter((r) => r.kind === 'bundle')
+        .flatMap((r) => list(r.cites))
+        .filter((f) => /[/.]/.test(f)),
     ]),
   ];
 }

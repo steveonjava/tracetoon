@@ -25,6 +25,7 @@ import {
   ownerRows,
   failedPublishRows,
   noPassAfterCommitRow,
+  bundleRow,
   editsBetween,
   remotePathRows,
   liveEvidence,
@@ -1504,12 +1505,19 @@ export function briefParts(
   // contradiction next to it (r21, 5 judgments).
   const receiptPass = freshPass.length > 0 || !!opts.freshPass;
   const noPass = receiptPass ? undefined : noPassAfterCommitRow(g, scopedRuns);
+  // Built or vendored output beside its changed source: a consequence, not
+  // housekeeping; an open point when the source changed after it was built.
+  const bundle = bundleRow(g, fileRole);
   limits.splice(
     0,
     limits.length,
     ...capLimits(
       limits,
-      [...(noPass ? [noPass] : []), ...failedPublishRows(g)],
+      [
+        ...(noPass ? [noPass] : []),
+        ...(bundle?.stale ? [{ change: null, kind: 'open', limit: bundle.fact }] : []),
+        ...failedPublishRows(g),
+      ],
       remotePathRows(hunkRows, fileRole, scopedRuns, liveEvidence(g)),
     ),
   );
@@ -1557,7 +1565,7 @@ export function briefParts(
       files: refs(versionFiles, 6),
     });
   const generated = [...fileRole]
-    .filter(([, r]) => r === 'generated')
+    .filter(([f, r]) => r === 'generated' && !bundle?.files.includes(f))
     .map(([f]) => f)
     .sort();
   if (generated.length)
@@ -1588,6 +1596,13 @@ export function briefParts(
     })),
     links: hunkLinks,
   };
+  if (bundle)
+    process.push({
+      ref: `PR${process.length + 1}`,
+      kind: 'bundle',
+      fact: bundle.fact,
+      cites: [...bundle.files.slice(0, 6), ...bundle.cites],
+    });
   const entry = entryRow(g, links);
   if (entry) process.push({ ref: `PR${process.length + 1}`, ...entry });
   // Where each behavior lives: commit sentences → the function that does it.

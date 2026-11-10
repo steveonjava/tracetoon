@@ -8,6 +8,7 @@ import {
   staleNoPass,
 } from '../src/graph/briefRender.ts';
 import {
+  bundleRow,
   capLimits,
   entryRow,
   failedPublishRows,
@@ -827,5 +828,121 @@ describe('tested behaviors attributed to the file whose titles show them', () =>
       b,
     );
     expect(r.flags.map((f) => f.severity)).toEqual(['check']);
+  });
+});
+
+describe('built output beside its changed source', () => {
+  const roles = new Map([
+    ['src/a.ts', 'behavior'],
+    ['dist/app.mjs', 'generated'],
+    ['bun.lock', 'generated'],
+  ]);
+  const session = N('Session', 'h:a', { band: 'included' });
+  const edit = (id: string, file: string, at: number) => [
+    N('Edit', id, { t: t(at), file, inPr: true }),
+  ];
+  const editRels = (id: string, file: string) => [
+    R('EDITS', ['Edit', id], ['File', file]),
+    R('IN_SESSION', ['Edit', id], ['Session', 'h:a']),
+  ];
+  const build = (id: string, at: number) =>
+    N('Run', id, { t: t(at), kind: 'build', outcome: 'passed', cmd: 'bun run bundle' });
+  const files = [fileNode('src/a.ts'), fileNode('dist/app.mjs', 'generated')];
+
+  test('a build after the last source edit: rebuilt; a source edit after it: stale', () => {
+    const fresh = withGraph(
+      graphOf(
+        [session, ...files, ...edit('E1', 'src/a.ts', 2), build('R1', 3)],
+        [
+          ...editRels('E1', 'src/a.ts'),
+          R('IN_SESSION', ['Run', 'R1'], ['Session', 'h:a']),
+        ],
+      ),
+      (g) => bundleRow(g, roles),
+    );
+    expect(fresh).toEqual({
+      fact: 'dist/app.mjs is built or vendored output, and the PR also changes its source; a build run (R1) came after the last captured source edit (src/a.ts), so it was regenerated after the source changes.',
+      cites: ['R1'],
+      stale: false,
+      files: ['dist/app.mjs'],
+    });
+    const stale = withGraph(
+      graphOf(
+        [session, ...files, ...edit('E1', 'src/a.ts', 4), build('R1', 3)],
+        [
+          ...editRels('E1', 'src/a.ts'),
+          R('IN_SESSION', ['Run', 'R1'], ['Session', 'h:a']),
+        ],
+      ),
+      (g) => bundleRow(g, roles),
+    );
+    expect(stale?.stale).toBe(true);
+    expect(stale?.fact).toContain(
+      'src/a.ts was edited after the last build run (R1), so the committed output may not include that edit.',
+    );
+  });
+
+  test('the brief: a bundle process row and an open point, not housekeeping', () => {
+    const p = withGraph(
+      graphOf(
+        [
+          session,
+          ...files,
+          fileNode('bun.lock', 'generated'),
+          ...edit('E1', 'src/a.ts', 4),
+          build('R1', 3),
+        ],
+        [
+          ...editRels('E1', 'src/a.ts'),
+          R('IN_SESSION', ['Run', 'R1'], ['Session', 'h:a']),
+        ],
+      ),
+      (g) => briefParts(g),
+    );
+    const rows = (title: string) => p.sections.find((x) => x.title === title)?.rows ?? [];
+    expect(rows('housekeeping').flatMap((r) => r.files as string[])).toEqual([
+      'bun.lock',
+    ]);
+    const bundle = rows('process').find((r) => r.kind === 'bundle')!;
+    expect(bundle.cites).toEqual(['dist/app.mjs', 'R1']);
+    expect(rows('limits').map((r) => String(r.limit))).toContainEqual(
+      expect.stringContaining('the committed output may not include that edit'),
+    );
+  });
+
+  test('without session evidence the commits decide; with no source change there is no row', () => {
+    const commits = (bundleAt: number, srcAt: number) =>
+      withGraph(
+        graphOf(
+          [
+            ...files,
+            N('Commit', 'aaaaaaaaaaaa1', { subject: 's', body: null, t: t(bundleAt) }),
+            N('Commit', 'bbbbbbbbbbbb2', { subject: 's', body: null, t: t(srcAt) }),
+          ],
+          [
+            R('TOUCHES', ['Commit', 'aaaaaaaaaaaa1'], ['File', 'dist/app.mjs']),
+            R('TOUCHES', ['Commit', 'bbbbbbbbbbbb2'], ['File', 'src/a.ts']),
+          ],
+        ),
+        (g) => bundleRow(g, roles),
+      );
+    expect(commits(5, 3)?.stale).toBe(false);
+    expect(commits(3, 5)?.stale).toBe(true);
+    const noSource = withGraph(graphOf(files), (g) =>
+      bundleRow(g, new Map([['dist/app.mjs', 'generated']])),
+    );
+    expect(noSource).toBeUndefined();
+    // A lockfile alone is housekeeping, not built output.
+    expect(
+      withGraph(graphOf(files), (g) =>
+        bundleRow(
+          g,
+          new Map([
+            ['src/a.ts', 'behavior'],
+            ['bun.lock', 'generated'],
+          ]),
+        ),
+      ),
+    ).toBeUndefined();
   });
 });
