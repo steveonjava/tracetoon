@@ -9,7 +9,11 @@ import {
   statusMask,
 } from '../src/digest/build.ts';
 import { logRunStatable, validationSection } from '../src/graph/briefRender.ts';
-import { earlierFailure, selectValidationRuns } from '../src/graph/runHistory.ts';
+import {
+  earlierFailure,
+  historyFallback,
+  selectValidationRuns,
+} from '../src/graph/runHistory.ts';
 import { git } from '../src/util/exec.ts';
 import { ClaudeLog, makeRepo, tempDir } from './helpers.ts';
 
@@ -75,6 +79,28 @@ describe('session-log runs the Validation section may state', () => {
         statable: false,
       }),
     ).toBe(false);
+  });
+
+  test('history fallback: the latest statable run of a kind no chosen run states', () => {
+    const runs = [
+      row('R1', 1, { outcome: 'passed', summary: ['4 pass', '0 fail'] }),
+      row('R2', 2, { outcome: 'unknown', summary: [] }),
+      row('R3', 3, { kind: 'lint', cmd: 'eslint .', outcome: 'passed', summary: ['ok'] }),
+      row('R4', 4, {
+        kind: 'typecheck',
+        cmd: 'tsc',
+        outcome: 'passed',
+        summary: ['0 errors'],
+        statable: false,
+      }),
+    ];
+    const chosen = selectValidationRuns(runs);
+    // The rerun with no result supersedes R1; the lint pass is chosen.
+    expect(chosen.map((r) => r.id).sort()).toEqual(['R2', 'R3']);
+    const fb = historyFallback(runs, chosen);
+    expect(fb.map((f) => [f.run.id, f.after?.id])).toEqual([['R1', 'R2']]);
+    // Statability is unchanged: the digest's no stays a no; a receipt's kind is skipped.
+    expect(historyFallback(runs, chosen, new Set(['test']))).toEqual([]);
   });
 
   test('an earlier failure known only from an exit status gets no clause', () => {
@@ -152,14 +178,28 @@ describe('the brief, end to end', () => {
         .bash('bun test && bun x tsc --noEmit', '3 pass\n0 fail')
         .bash('bun run typecheck 2>&1 | tail -3', '$ tsc --noEmit'),
     );
-    // Checks ran, none statable: no "found nothing" line, which read as "no checks ran".
-    expect(validation).toEqual([]);
+    // Checks ran, none statable: not "found nothing", which read as "no checks
+    // ran", and not an empty section either.
+    expect(validation).toEqual([
+      "- The session logs record check runs, but Tracetoon can't pin a result line on any of them, so it states none here.",
+    ]);
     expect(limits.some((l) => l.includes('its exit status was hidden by a pipe'))).toBe(
       true,
     );
     expect(
       limits.some((l) => /has no result|no result for it was captured/.test(l)),
     ).toBe(false);
+  });
+
+  test('with no receipt, a pass a later unstatable failure contradicts is still shown, with that run', () => {
+    // Before: the later exit-status-only failure dropped the pass, and the
+    // section was empty. The pass is stated with the run after it.
+    const { validation } = brief((log) =>
+      log.bash('bun test', '4 pass\n0 fail').bash('bun test tests/a.test.ts', '', true),
+    );
+    expect(validation[0]).toBe(
+      '- `bun test`: passed (4 pass, 0 fail) in the session logs. Followed by `bun test tests/a.test.ts` (failed).',
+    );
   });
 
   test("a run alone with its own result lines is shown; an exit-status failure isn't recalled", () => {

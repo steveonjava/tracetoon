@@ -169,6 +169,34 @@ export function selectValidationRuns(
 }
 
 /**
+ * With no passing `tracetoon check` receipt, the Validation section would be
+ * empty whenever the chosen run of every kind is unstatable (its command's
+ * rerun showed no result, or a later run ended differently). For each check
+ * kind with no statable chosen run, this returns the latest statable run of
+ * the kind, and the last run of the kind after it (if any), so the section
+ * states that history instead of nothing. Statability itself is unchanged
+ * (`statableRun`).
+ */
+export function historyFallback(
+  runs: RunRow[],
+  chosen: RunRow[],
+  skip: Set<string> = new Set(),
+): { run: RunRow; after?: RunRow }[] {
+  const sorted = [...runs].sort(byTime);
+  const out: { run: RunRow; after?: RunRow }[] = [];
+  for (const kind of HISTORY_KINDS) {
+    if (skip.has(kind)) continue;
+    if (chosen.some((r) => String(r.kind) === kind && statableRun(r))) continue;
+    const ofKind = sorted.filter((r) => String(r.kind) === kind);
+    const run = ofKind.filter(statableRun).at(-1);
+    if (!run) continue;
+    const after = ofKind.slice(ofKind.indexOf(run) + 1).at(-1);
+    out.push(after ? { run, after } : { run });
+  }
+  return out;
+}
+
+/**
  * The last failure of a kind before a passing run, for one short clause in
  * the Validation section ("an earlier run, `cmd`, failed (4 pass, 1 fail)").
  * Undefined unless `chosen` passed and an earlier run of its kind failed.

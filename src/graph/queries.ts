@@ -13,6 +13,7 @@ import {
   lastRunOfEach,
   runHistory,
   selectValidationRuns,
+  historyFallback,
   HISTORY_KINDS,
   runCounts,
 } from './runHistory.ts';
@@ -1368,10 +1369,31 @@ export function briefParts(
     const summary = ((f.summary as string[]) ?? []).filter(Boolean).join(', ');
     return `\`${cmd}\` failed${summary ? ` (${summary})` : ''}`;
   };
+  // No passing receipt: the session-log runs are all Validation can show, so a
+  // kind whose chosen run can't be stated falls back to its latest statable
+  // run, with the run after it named (r5: 17 of 58 Claude drafts had an empty
+  // Validation section).
+  const fallback = receipts.some((v) => v.outcome === 'passed')
+    ? []
+    : historyFallback(scopedRuns, chosen, receiptKinds);
+  const laterOf = new Map(
+    fallback.filter((f) => f.after).map((f) => [String(f.run.id), f.after!]),
+  );
+  const followedBy = (r: Record<string, unknown>): string | null => {
+    const a = laterOf.get(String(r.id));
+    if (!a) return null;
+    const cmd = shownCommand(a.cmd);
+    if (!cmd || /‹withheld›|<withheld>/.test(cmd)) return 'another run of the kind';
+    const word =
+      a.outcome === 'passed' || a.outcome === 'failed'
+        ? String(a.outcome)
+        : 'result not shown';
+    return `\`${cmd}\` (${word})`;
+  };
   const validation: Record<string, unknown>[] = (
     [
       ...receipts.map((v) => ({ ...v, editedAfter: [] as string[] })),
-      ...[...chosen]
+      ...[...chosen, ...fallback.map((f) => f.run)]
         .sort((a, b) => factOrder(String(a.id), String(b.id)))
         .map((r) => ({
           ...r,
@@ -1389,6 +1411,8 @@ export function briefParts(
     editedAfter: r.editedAfter,
     cmd: r.cmd,
     earlier: /^V\d/.test(String(r.id ?? '')) ? null : earlierOf(r),
+    // A fallback run's later run of the kind (see historyFallback).
+    ...(laterOf.has(String(r.id)) ? { followedBy: followedBy(r) } : {}),
     // Whether render may state a session-log run (runHistory `statableRun`).
     ...(typeof r.statable === 'boolean' ? { statable: r.statable } : {}),
   }));
@@ -1741,7 +1765,18 @@ export function briefParts(
     section('housekeeping', ['ref', 'what', 'files'], housekeeping),
     section(
       'validation',
-      ['check', 'kind', 'outcome', 'result', 'when', 'editedAfter', 'cmd', 'earlier'],
+      [
+        'check',
+        'kind',
+        'outcome',
+        'result',
+        'when',
+        'editedAfter',
+        'cmd',
+        'earlier',
+        // Only on a fallback run (no passing receipt): the run of its kind after it.
+        ...(validation.some((r) => r.followedBy) ? ['followedBy'] : []),
+      ],
       validation,
     ),
     // Only when it has rows: commands after a file's last edit that are not checks Tracetoon knows.

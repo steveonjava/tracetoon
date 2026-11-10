@@ -202,11 +202,14 @@ export function validationSection(b: BriefParts): string {
             .replace(/[.;]+$/, '')
             .replace(/;\s*/g, ', ')
         : '';
+    // A fallback run (no passing receipt; see runHistory `historyFallback`):
+    // the run of the kind that came after it, by command and outcome.
+    const followed = typeof r.followedBy === 'string' ? r.followedBy.trim() : '';
     shown.push({
       kind,
       // A run with later edits says so even when they aren't PR files, as
       // the claim check (digest/claims.ts) requires of a stale run.
-      line: `- ${cmd === ORPHAN_COMMAND ? "A test run whose command the log doesn't show" : `\`${cmd}\``}: ${String(r.outcome)} (${plain(r.result).replace(/;\s*/g, ', ')}) in the session logs${edited ? `, before later edits to ${edited}` : String(r.when ?? '').startsWith('before later edits') ? ', before later edits' : ''}.${earlier ? ` An earlier run of ${earlier}.` : ''}`,
+      line: `- ${cmd === ORPHAN_COMMAND ? "A test run whose command the log doesn't show" : `\`${cmd}\``}: ${String(r.outcome)} (${plain(r.result).replace(/;\s*/g, ', ')}) in the session logs${edited ? `, before later edits to ${edited}` : String(r.when ?? '').startsWith('before later edits') ? ', before later edits' : ''}.${earlier ? ` An earlier run of ${earlier}.` : ''}${followed ? ` Followed by ${followed}.` : ''}`,
       when: String(r.when ?? ''),
       current: false,
     });
@@ -235,6 +238,12 @@ export function validationSection(b: BriefParts): string {
     );
   if (!lines.length && !ranChecks)
     lines.push('- No test, typecheck or lint run appears in the session logs.');
+  // Checks ran but none can be stated and nothing was checked on the
+  // submitted content: say so rather than leave the section empty (r5).
+  else if (!lines.length)
+    lines.push(
+      "- The session logs record check runs, but Tracetoon can't pin a result line on any of them, so it states none here.",
+    );
   if (others.length && stale)
     lines.push(
       `- After the last captured edit the session also ran ${others.map((c) => `\`${c}\``).join(', ')}, which Tracetoon does not classify as checks.`,
