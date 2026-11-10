@@ -43,6 +43,23 @@ export function statableRun(r: RunRow): boolean {
   );
 }
 
+/**
+ * A run's pass/fail counts from its own result lines ("4 pass, 0 fail"), for
+ * the process rows' trajectory text. Empty unless the run is statable: a count
+ * from a shared or exit-status-only output can't be pinned on it.
+ */
+export function runCounts(r: RunRow): string {
+  if (!statableRun(r)) return '';
+  return summaryOf(r)
+    .filter((l) =>
+      /\b\d+\s+(?:pass|fail|passed|failed|tests?|errors?|skip(?:ped)?)\b/i.test(l),
+    )
+    .filter((l) => !/^exit \d+/.test(l))
+    .slice(0, 3)
+    .map((l) => l.slice(0, 60))
+    .join(', ');
+}
+
 const byTime = (a: RunRow, b: RunRow) =>
   String(a.t ?? '').localeCompare(String(b.t ?? ''));
 
@@ -257,7 +274,8 @@ export function runHistory(
       : '';
   const part = (g: { outcome: string; runs: RunRow[] }) => {
     const n = g.runs.length;
-    return `${OUTCOME_WORD[g.outcome]!}${n > 1 ? ` ${times(n)}` : ''} (${ids(g.runs)}${g.outcome === 'failed' ? failedCmd(g.runs) : ''})`;
+    const counts = runCounts(g.runs.at(-1)!);
+    return `${OUTCOME_WORD[g.outcome]!}${n > 1 ? ` ${times(n)}` : ''} (${ids(g.runs)}${g.outcome === 'failed' ? failedCmd(g.runs) : ''}${counts ? `; ${n > 1 ? 'last ' : ''}${counts}` : ''})`;
   };
   let order: string;
   if (groups.length <= 3) order = `in order: ${groups.map(part).join(', then ')}`;

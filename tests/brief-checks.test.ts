@@ -20,6 +20,7 @@ import { GRAPH_SCHEMA, type EvidenceGraph } from '../src/graph/model.ts';
 import { renderNeighborhood } from '../src/graph/neighborhood.ts';
 import {
   earlierFailure,
+  runCounts,
   runHistory,
   selectValidationRuns,
 } from '../src/graph/runHistory.ts';
@@ -266,6 +267,25 @@ describe('validation run selection: the broadest run, and an earlier failure', (
 });
 
 describe('run history', () => {
+  test("counts come only from a run's own result lines", () => {
+    expect(
+      runCounts(run('R1', 1, 'test', 'bun test', 'passed', ['12 pass', '0 fail'])),
+    ).toBe('12 pass, 0 fail');
+    // Shared output, an exit status alone, or a non-count line: no count.
+    expect(
+      runCounts(run('R2', 1, 'test', 'bun test a ; bun test b', 'passed', ['3 pass'])),
+    ).toBe('');
+    expect(runCounts(run('R3', 1, 'test', 'bun test', 'failed', ['exit 1']))).toBe('');
+    expect(
+      runCounts({
+        ...run('R4', 1, 'test', 'bun test', 'passed', ['3 pass']),
+        statable: false,
+      }),
+    ).toBe('');
+    expect(
+      runCounts(run('R5', 1, 'lint', 'eslint .', 'passed', ['All files pass linting'])),
+    ).toBe('');
+  });
   test('a kind that went from failing to passing reads in order', () => {
     const h = runHistory([
       run('R9', 1, 'test', 'bun test tests/shell.test.ts', 'failed', [
@@ -276,7 +296,7 @@ describe('run history', () => {
       run('R15', 3, 'test', 'bun test tests/a.test.ts', 'passed', ['22 pass', '0 fail']),
     ]);
     expect(h?.text).toBe(
-      "Tests failed in the first run, then passed (failing to passing). 3 test runs in this PR's turns (3 commands), in order: failed (R9 `bun test tests/shell.test.ts`), then passed twice (R11, R15)",
+      "Tests failed in the first run, then passed (failing to passing). 3 test runs in this PR's turns (3 commands), in order: failed (R9 `bun test tests/shell.test.ts`; 4 pass, 1 fail), then passed twice (R11, R15; last 22 pass, 0 fail)",
     );
     const same = runHistory([
       run('R1', 1, 'test', 'bun test', 'failed', ['1 fail']),
@@ -284,7 +304,7 @@ describe('run history', () => {
       run('R3', 3, 'test', 'bun test', 'passed', ['3 pass']),
     ]);
     expect(same?.text).toBe(
-      "`bun test` failed in the first 2 runs, then passed (failing to passing). 3 runs in this PR's turns, in order: failed twice (R1, R2), then passed (R3)",
+      "`bun test` failed in the first 2 runs, then passed (failing to passing). 3 runs in this PR's turns, in order: failed twice (R1, R2; last 1 fail), then passed (R3; 3 pass)",
     );
     // A pass, then a rerun with no result (pr11's typecheck).
     expect(

@@ -305,7 +305,7 @@ describe('evidence graph', () => {
       [
         'PR3',
         'test',
-        "`bun test` passed in the first run, then failed (passing to failing). 2 runs in this PR's turns, in order: passed (R1), then failed (R2).",
+        "`bun test` passed in the first run, then failed (passing to failing). 2 runs in this PR's turns, in order: passed (R1; 3 pass, 0 fail), then failed (R2; 3 pass, 1 fail).",
       ],
     ]);
   });
@@ -1631,11 +1631,9 @@ describe('the brief states recorded process and behavior', () => {
     expect(facts).not.toMatch(/no pass(ing run recorded)? after the last commit/);
     const limits = p.sections.find((x) => x.title === 'limits')!.rows;
     expect(limits.some((l) => /No passing check run/.test(String(l.limit)))).toBe(false);
-    // The fact stays, and an open point says the session run is history.
-    expect(limits.map((l) => String(l.limit))).toContainEqual(
-      expect.stringMatching(
-        /^The last passing run, R2 \(test\), is a session run from before the last commit .*a historical session run, not re-run on the final content\.$/,
-      ),
+    // The pass covers the commit: no historical-run point either.
+    expect(limits.some((l) => /last passing run|historical/.test(String(l.limit)))).toBe(
+      false,
     );
   });
 
@@ -1765,7 +1763,7 @@ describe('the brief states recorded process and behavior', () => {
       [
         'PR4',
         'test',
-        "`bun test` failed in the first run, then passed (failing to passing). 2 runs in this PR's turns, in order: failed (R1), then passed (R2); a passing run came after the last commit (R2).",
+        "`bun test` failed in the first run, then passed (failing to passing). 2 runs in this PR's turns, in order: failed (R1; 2 pass, 1 fail), then passed (R2; 3 pass, 0 fail); a passing run came after the last commit (R2).",
       ],
       [
         'PR5',
@@ -1790,6 +1788,27 @@ describe('the brief states recorded process and behavior', () => {
     ]);
     expect(sec('commitMessages')).toEqual([]);
     expect(b.branchy).toEqual(['src/a.ts']);
+  });
+
+  test('a receipt that could not run here neither counts for its kind nor hides a log pass', () => {
+    const g: EvidenceGraph = structuredClone(graph);
+    const v = g.nodes.find((n) => n.id === 'V1')!;
+    Object.assign(v.props, {
+      outcome: 'failed',
+      summary: ['could not run here: sh: 1: tsc: not found'],
+    });
+    // The session's typecheck run printed a result line of its own.
+    g.nodes.find((n) => n.id === 'R3')!.props.summary = ['Found 0 errors'];
+    const p = withGraph(g, (e) => briefParts(e));
+    const rows = p.sections.find((x) => x.title === 'validation')!.rows;
+    // The session's typecheck pass is chosen beside the unrun receipt.
+    expect(rows.map((r) => r.check)).toEqual(['V1', 'R2', 'R3']);
+    expect(p.freshPass).toBe(false);
+    const v8n = validationSection(p);
+    expect(v8n).toContain(
+      '- `bun x tsc --noEmit`: could not run here: sh: 1: tsc: not found (`tracetoon check`).',
+    );
+    expect(v8n).not.toMatch(/tsc --noEmit`: failed/);
   });
 
   test('render flags universal words about branching code without instruction rows', () => {

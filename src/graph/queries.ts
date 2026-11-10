@@ -14,6 +14,7 @@ import {
   runHistory,
   selectValidationRuns,
   HISTORY_KINDS,
+  runCounts,
 } from './runHistory.ts';
 import { fileRole as pathRole } from '../digest/build.ts';
 import { isNeighborhood, type BriefLayout } from './layout.ts';
@@ -890,7 +891,7 @@ function processRows(
     // A kind that never failed: one clause in a shared row.
     if (!failed.length) {
       quiet.push({
-        text: `${kind} (${rs.length} run(s), last ${String(last.id)} ${last.outcome === 'passed' ? 'passed' : last.outcome === 'failed' ? 'failed' : 'exit status not shown'}${
+        text: `${kind} (${rs.length} run(s), last ${String(last.id)} ${last.outcome === 'passed' ? 'passed' : last.outcome === 'failed' ? 'failed' : 'exit status not shown'}${runCounts(last) ? ` [${runCounts(last)}]` : ''}${
           lastCommit && !noPassLimit && (after.length > 0 || !receiptPass)
             ? after.length
               ? `, passed after the last commit (${ids(after).join(', ')})`
@@ -911,7 +912,7 @@ function processRows(
           ? `${failed.length} failed (${ids(failed).join(', ')})`
           : 'none failed',
         ...(unknown.length ? [`${unknown.length} with exit status not shown`] : []),
-        `last ${String(last.id)} ${String(last.outcome === 'unknown' ? 'exit status not shown' : last.outcome)}`,
+        `last ${String(last.id)} ${String(last.outcome === 'unknown' ? 'exit status not shown' : last.outcome)}${runCounts(last) ? ` (${runCounts(last)})` : ''}`,
         ...(lastCommit && !noPassLimit && (after.length > 0 || !receiptPass)
           ? [
               after.length
@@ -1535,9 +1536,7 @@ export function briefParts(
     turns,
     scopedRuns,
     new Set(background.map((r) => String(r.ref))),
-    // A historical-run point keeps the process row's fact: which pass came
-    // just before the commit.
-    !!noPass && !noPass.historical,
+    !!noPass,
     receiptPass,
   );
   // Where to start reading: the changed function that owns the behavior.
