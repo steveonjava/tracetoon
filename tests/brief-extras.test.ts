@@ -281,6 +281,34 @@ describe('the entry point', () => {
     });
   });
 
+  test('every changed test file gets a tests row, titles or not; fixtures do not', () => {
+    const extra = [
+      fileNode('tests/helpers.ts', 'tests'),
+      fileNode('tests/fixtures/sample.json', 'tests'),
+      hunkNode('H5', 'tests/helpers.ts', { tests: [] }),
+    ];
+    const titled = hunks.map((h) =>
+      h.id === 'H3'
+        ? { ...h, props: { ...h.props, tests: ['picks a ready provider'] } }
+        : h,
+    );
+    const p = withGraph(
+      graphOf(
+        [...files, ...titled, ...extra, ...changes],
+        [
+          ...rels,
+          R('OF', ['Hunk', 'H5'], ['File', 'tests/helpers.ts']),
+          R('HAS', ['Change', 'CH1'], ['Hunk', 'H5']),
+        ],
+      ),
+      (g) => briefParts(g),
+    );
+    expect(p.sections.find((x) => x.title === 'tests')!.rows).toEqual([
+      { ref: 'T1', file: 'tests/comic.test.ts', titles: ['picks a ready provider'] },
+      { ref: 'T2', file: 'tests/helpers.ts', titles: [] },
+    ]);
+  });
+
   test('with no function calling across files, the most-referenced source symbol that owns added lines', () => {
     const lone = hunks.filter((h) => h.id !== 'H2');
     const row = withGraph(

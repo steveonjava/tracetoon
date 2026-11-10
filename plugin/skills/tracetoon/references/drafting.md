@@ -175,6 +175,9 @@ strips tags and lists untagged sentences and unknown refs.
   of a vaguer paraphrase.
 - Don't count tests or name test helpers.
 - Say each thing once: no recap, no second list of the same changes.
+- In the correction round, a review finding's `fix` is a pointer, never
+  wording to paste: re-read the diff lines it cites and write the sentence
+  from the patch.
 - No meta text in the body: nothing about the brief, Tracetoon's rows, this
   drafting process or what you did or didn't read ("I did not review these
   hunks", "this description does not claim to cover…"). Describe the change

@@ -75,9 +75,10 @@ packet), exactly this shape, and no other file:
   ref (`CH2`, `commit:<sha>#3`, `L4`, `T1`, `S1`) or `path:line`. Prefer
   `diff:`; separate several with `|`.
 - `quote`: verbatim from one numbered body line, without the number.
-- `fix`: one line on what the cited lines show and what to change. The
-  drafter checks it against the patch before using it, so state the fact,
-  not ready-to-paste body prose.
+- `fix`: a pointer, never wording to paste: one line on what the cited
+  lines show and what to change. The drafter re-reads the cited diff lines
+  and writes the sentence from the patch, so state the fact, not
+  ready-to-paste body prose.
 - `agentId`: the id your host gave you (not "reviewer" or a placeholder). If
   you don't know it, say so in your reply and the coordinator passes it.
 

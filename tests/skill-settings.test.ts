@@ -91,6 +91,13 @@ describe('skill settings', () => {
     // Findings are checked against the patch; flagged claims are fixed or rejected.
     expect(skill).toContain('never paste its wording unchecked');
     expect(skill).toMatch(/rejected with the diff\s+line/);
+    // A finding's fix is a pointer: the writer re-reads the cited lines.
+    expect(skill).toMatch(/`fix` is a pointer to what to look at, never wording/);
+    expect(drafting).toMatch(/`fix` is a pointer, never\s+wording to paste/);
+    for (const name of ['reviewer-lean.md', 'reviewer-lens-d.md']) {
+      const text = await Bun.file(`plugin/skills/tracetoon/references/${name}`).text();
+      expect(text).toMatch(/`fix`: a pointer, never wording to paste/);
+    }
   });
 });
 

@@ -675,6 +675,10 @@ export function behaviorOf(hunks: Record<string, unknown>[]): string[] {
   ).slice(0, 4);
 }
 
+/** A test file of code (not a fixture or snapshot): it gets a `tests` row. */
+const TEST_CODE =
+  /\.(?:[cm]?[jt]sx?|py|go|rs|rb|java|kt|kts|swift|cs|php|scala|exs?|c|cc|cpp|h|hpp|dart|lua|sh|bats)$/i;
+
 /**
  * How the work was done, as recorded: each session's part, whether a plan or
  * decision was recorded, each check kind's runs over this PR's turns, and
@@ -1489,6 +1493,12 @@ export function briefParts(
         String(h.file),
         uniq([...(testsByFile.get(String(h.file)) ?? []), t]),
       );
+  // Every changed test file has a row, titles or not: a file whose changes
+  // add no recognised title (edited assertions, a helper, a new framework's
+  // syntax) was missing, and writers then said the PR changed no tests.
+  for (const [file, role] of [...fileRole].sort(([a], [b]) => a.localeCompare(b)))
+    if (role === 'tests' && TEST_CODE.test(file) && !testsByFile.has(file))
+      testsByFile.set(file, []);
   for (const [file, titles] of testsByFile)
     // Titles in full: a "+N more" marker was read as a count of tests (smoke15).
     tests.push({ ref: `T${tests.length + 1}`, file, titles: titles.slice(0, 8) });

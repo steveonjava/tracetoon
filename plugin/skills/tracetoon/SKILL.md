@@ -228,9 +228,10 @@ reviewer separate.
         - a claim flagged contradicted, overstated or unsupported is either
           fixed (narrowed, attributed or removed) or rejected with the diff
           line or row that supports the original; never silently left as is;
-        - write the fix from the patch, not from the reviewer's `fix` text:
-          never paste its wording unchecked (a pasted fix that misreads the
-          code is a new error);
+        - a finding's `fix` is a pointer to what to look at, never wording:
+          re-read the diff lines it cites and write the sentence from the
+          patch; never paste its wording unchecked (a pasted fix that
+          misreads the code is a new error);
         - add an omission only when the cited row or diff lines show it.
         Then `render --check --json` (it notes flagged quotes still verbatim
         in the body). Recheck per the `Review recheck:` line: `once` → send
