@@ -451,6 +451,40 @@ describe('evidence graph', () => {
     expect(r.json.contributionReview.status).toBe('skipped');
   });
 
+  test('hunks: a moved or reflowed line is counted as moved, not as a changed value or rule', () => {
+    const patch = [
+      'diff --git a/src/a.ts b/src/a.ts',
+      '--- a/src/a.ts',
+      '+++ b/src/a.ts',
+      '@@ -1,6 +1,6 @@',
+      '-  if (count > 10) return;',
+      '-  const limit = 10;',
+      ' function run() {',
+      '+  const limit = 20;',
+      '   work();',
+      '+    if (count > 10) return;',
+      ' }',
+      'diff --git a/docs/guide.md b/docs/guide.md',
+      '--- a/docs/guide.md',
+      '+++ b/docs/guide.md',
+      '@@ -1,3 +1,3 @@',
+      '-Runs stop after 10 retries and the',
+      '-limit can be raised with --max.',
+      '+Runs stop after 10 retries and the limit',
+      '+can be raised with --max.',
+      '',
+    ].join('\n');
+    const [code, doc] = patchHunks(patch);
+    // The moved condition is neither a changed nor an added/removed condition;
+    // the value that really changed still pairs.
+    expect(code!.moved).toBe(1);
+    expect(code!.pairs).toEqual(['const limit = 10; → const limit = 20;']);
+    expect(code!.conds.some((c) => c.includes('count > 10'))).toBe(false);
+    // Reflowed prose: no pair, all lines moved.
+    expect(doc!.moved).toBe(2);
+    expect(doc!.pairs).toEqual([]);
+  });
+
   test('hunks: symbols end with their body, imports define nothing, values and tests are read', () => {
     const patch = [
       'diff --git a/src/a.ts b/src/a.ts',
@@ -1635,6 +1669,30 @@ describe('the brief states recorded process and behavior', () => {
     expect(limits.some((l) => /last passing run|historical/.test(String(l.limit)))).toBe(
       false,
     );
+  });
+
+  test('the first request is the goal only for the units its own turn produced', () => {
+    // S1, the session's first prompt, makes the edit that survives in CH1.
+    const own = (text: string, askedBy: string) => {
+      const g: EvidenceGraph = structuredClone(graph);
+      g.nodes.find((n) => n.id === 'S1')!.props.text = text;
+      for (const r of g.rels) {
+        if (r.type === 'IN_TURN' && r.from.id === 'E1') r.to.id = 'S1';
+        if (r.type === 'ASKED_BY' && r.from.id === 'CH1') r.to.id = askedBy;
+      }
+      const p = withGraph(g, (e) => briefParts(e));
+      return p.sections.find((x) => x.title === 'requests')!.rows;
+    };
+    const goal = own('Add a retry limit to the fetch command', 'S1');
+    expect(goal.find((r) => r.ref === 'S1')!.kind).toBe(
+      'goal: the first request of the session; its turn produced CH1; user request',
+    );
+    // Productive, but the unit came from another turn: no goal label.
+    const other = own('Add a retry limit to the fetch command', 'S3');
+    expect(other.some((r) => /^goal/.test(String(r.kind)))).toBe(false);
+    // A plan approval is no goal, even when its turn made the unit.
+    const approval = own('Implement the plan.', 'S1');
+    expect(approval.find((r) => r.ref === 'S1')!.kind).toBe('user request');
   });
 
   test("requests are this PR's turns only; a cut-off record is marked", () => {

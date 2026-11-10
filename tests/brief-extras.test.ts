@@ -281,6 +281,21 @@ describe('the entry point', () => {
     });
   });
 
+  test('moved lines are said as moved in `was`, not as a changed value', () => {
+    const moved = hunks.map((h) =>
+      h.id === 'H2' ? { ...h, props: { ...h.props, moved: 3 } } : h,
+    );
+    const p = withGraph(graphOf([...files, ...moved, ...changes], rels), (g) =>
+      briefParts(g),
+    );
+    const was = p.sections
+      .find((x) => x.title === 'changes')!
+      .rows.flatMap((r) => (r.was as string[]) ?? []);
+    expect(was).toEqual([
+      'src/commands/comic.ts: 3 line(s) moved or reflowed, text unchanged',
+    ]);
+  });
+
   test('every changed test file gets a tests row, titles or not; fixtures do not', () => {
     const extra = [
       fileNode('tests/helpers.ts', 'tests'),

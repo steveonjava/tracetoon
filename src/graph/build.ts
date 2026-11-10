@@ -58,6 +58,12 @@ export interface PatchHunk {
   /** Test titles added in this hunk (`test('…')`, `def test_…`, `func Test…`). */
   tests: string[];
   /**
+   * Removed lines that reappear, whitespace aside, as added lines of the same
+   * file (moved or re-indented), or a hunk whose text is only reflowed: not a
+   * changed value, condition or rule. Counted, and left out of `pairs`/`conds`.
+   */
+  moved?: number;
+  /**
    * Per function whose body a changed line is in (the nearest definition above
    * it): `name: word word …`, the lowercased words of those changed lines, so
    * a sentence can be matched to the function inside a hunk that holds several.
@@ -282,12 +288,34 @@ export function patchHunks(patch: string): PatchHunk[] {
   }
   close();
   const addedDefs = new Set(hunks.flatMap((h) => h.symbols));
+  // Per file, the added and removed lines whitespace-normalized: a removed line
+  // that comes back elsewhere in the file was moved, not changed.
+  const perFile = new Map<string, { minus: string[]; plus: string[] }>();
+  for (const h of hunks) {
+    const ch = changed.get(h) ?? { minus: [], plus: [] };
+    const f = perFile.get(h.file) ?? { minus: [], plus: [] };
+    f.minus.push(...ch.minus);
+    f.plus.push(...ch.plus);
+    perFile.set(h.file, f);
+  }
+  const movedOf = new Map(
+    [...perFile].map(([f, x]) => [f, movedLines(x.minus, x.plus)] as const),
+  );
   for (const h of hunks) {
     h.fresh = h.symbols.filter((x) => !removedDefs.has(x));
     h.dropped = h.dropped.filter((x) => !addedDefs.has(x));
     const ch = changed.get(h) ?? { minus: [], plus: [] };
-    h.pairs = valuePairs(ch.minus, ch.plus);
-    h.conds = PROSE_FILE.test(h.file) ? [] : conditionFacts(ch.minus, ch.plus, h.pairs);
+    const kept = withoutMoved(
+      ch.minus,
+      ch.plus,
+      movedOf.get(h.file)!,
+      PROSE_FILE.test(h.file),
+    );
+    if (kept.moved) h.moved = kept.moved;
+    h.pairs = valuePairs(kept.minus, kept.plus);
+    h.conds = PROSE_FILE.test(h.file)
+      ? []
+      : conditionFacts(kept.minus, kept.plus, h.pairs);
     h.tests = uniqStrings(ch.plus.flatMap(testTitles)).slice(0, 8);
     h.words = uniqStrings([...ch.minus, ...ch.plus].flatMap(wordsOf)).slice(0, 400);
     h.fnWords = [...(byFn.get(h) ?? [])].map(
@@ -384,6 +412,55 @@ const isComment = (l: string) => /^\s*(\/\/|#(?!\[)|\*|\/\*|--\s)/.test(l);
  * kept when a few tokens differ and one of them is a number or string literal
  * (`last + 30 * 60_000 → last + 5 * 60_000`).
  */
+/** A line with whitespace collapsed; blank or brace-only lines are no evidence of a move. */
+const normLine = (l: string) => l.replace(/\s+/g, ' ').trim();
+const MOVABLE = (l: string) => /[\w'"`]/.test(l) && l.length >= 6;
+
+/**
+ * Lines removed and added again (whitespace-normalized) in one file, as a
+ * multiset: how many times each such line can be cancelled on either side.
+ */
+export function movedLines(minus: string[], plus: string[]): Map<string, number> {
+  const count = (ls: string[]) => {
+    const m = new Map<string, number>();
+    for (const l of ls.map(normLine).filter(MOVABLE)) m.set(l, (m.get(l) ?? 0) + 1);
+    return m;
+  };
+  const a = count(minus);
+  const b = count(plus);
+  const out = new Map<string, number>();
+  for (const [l, n] of a) if (b.has(l)) out.set(l, Math.min(n, b.get(l)!));
+  return out;
+}
+
+/**
+ * A hunk's changed lines without the moved ones (see `movedLines`; the budget
+ * is shared across the file's hunks). For prose, a hunk whose remaining
+ * removed and added text is the same once whitespace is collapsed was only
+ * reflowed: none of it is a change.
+ */
+export function withoutMoved(
+  minus: string[],
+  plus: string[],
+  moved: Map<string, number>,
+  prose = false,
+): { minus: string[]; plus: string[]; moved: number } {
+  const take = (ls: string[], budget: Map<string, number>) =>
+    ls.filter((l) => {
+      const k = normLine(l);
+      const n = budget.get(k) ?? 0;
+      if (n <= 0) return true;
+      budget.set(k, n - 1);
+      return false;
+    });
+  const m = take(minus, new Map(moved));
+  const p = take(plus, new Map(moved));
+  const count = minus.length - m.length;
+  if (prose && m.length && p.length && normLine(m.join(' ')) === normLine(p.join(' ')))
+    return { minus: [], plus: [], moved: count + m.length };
+  return { minus: m, plus: p, moved: count };
+}
+
 export function valuePairs(minus: string[], plus: string[]): string[] {
   const toks = (l: string): string[] => l.match(CODE_TOKEN) ?? [];
   const out: string[] = [];
@@ -758,6 +835,7 @@ export function buildEvidenceGraph(input: GraphInputs): EvidenceGraph {
       dropped: h.dropped,
       conds: h.conds,
       tests: h.tests,
+      moved: h.moved ?? null,
       fnWords: h.fnWords,
       words: h.words,
       code: h.code,

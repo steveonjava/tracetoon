@@ -531,6 +531,10 @@ export function thisPrTurns(g: GraphEngine): PrTurns {
   };
 }
 
+/** A prompt that approves a plan made earlier: the plan, not this prompt, holds the goal. */
+const PLAN_APPROVAL =
+  /^(?:(?:ok(?:ay)?|yes|great|thanks?|looks good)[,.!]?\s+)?(?:please\s+)?(?:implement|execute|go(?: ahead)? with|proceed with|start(?: on)?|apply|follow)\s+(?:the|this|that|your|my)\s+(?:\w+\s+)?plan\b/i;
+
 /** A prompt that only acknowledges or steers ("go ahead", "yes", "/clear"): never a session goal. */
 const ACK =
   /^(?:\/\S+.*|y(?:es|ep|eah)?|no|ok(?:ay)?|sure|thanks?(?: you)?|go(?: ahead| on| for it)?|continue|proceed|do it|lgtm|looks good|sounds good|please|approved?)[\s.!]*$/i;
@@ -999,7 +1003,7 @@ export function briefParts(
      RETURN c.id AS change, h.id AS hunk, h.file AS file, h.diff AS diff, h.scope AS scope,
             h.touched AS symbols, h.branches AS branches, h.fresh AS fresh, h.pairs AS pairs,
             h.conds AS conds,
-            h.tests AS tests, h.words AS words, count(DISTINCT e) AS edits,
+            h.tests AS tests, h.words AS words, h.moved AS moved, count(DISTINCT e) AS edits,
             collect(DISTINCT k.id) AS commits`,
   ).rows;
   const fileRole = new Map(
@@ -1051,11 +1055,24 @@ export function briefParts(
         .flatMap((h) => (h.fresh as string[]) ?? []),
     ).slice(0, 8);
     // Each pair with its file, to quote as a code change, not to retell.
-    const was = uniq(
-      hs.flatMap((h) =>
-        ((h.pairs as string[]) ?? []).map((p) => `${String(h.file)}: ${p}`),
+    // Lines only moved or reflowed are said as such, never as a changed value.
+    const movedIn = new Map<string, number>();
+    for (const h of hs)
+      if (
+        Number(h.moved) > 0 &&
+        !['tests', 'generated'].includes(fileRole.get(String(h.file)) ?? '')
+      )
+        movedIn.set(String(h.file), (movedIn.get(String(h.file)) ?? 0) + Number(h.moved));
+    const was = uniq([
+      ...hs
+        .flatMap((h) =>
+          ((h.pairs as string[]) ?? []).map((p) => `${String(h.file)}: ${p}`),
+        )
+        .slice(0, 4),
+      ...[...movedIn].map(
+        ([f, n]) => `${f}: ${n} line(s) moved or reflowed, text unchanged`,
       ),
-    ).slice(0, 4);
+    ]).slice(0, 5);
     const behavior = behaviorOf(
       hs.filter(
         (h) =>
@@ -1115,21 +1132,35 @@ export function briefParts(
       for (const f of ((a.facts as string[]) ?? []).sort(factOrder))
         factRow(f, ` in the turn of ${String(a.id)}`);
   }
-  // The session's opening request is the goal when its own turn produced
-  // surviving edits or commits in this PR; otherwise it is earlier work.
+  // The session's opening request is the goal only for the change units its
+  // own turn's surviving edits produced, named so a writer doesn't hang every
+  // unit on it; a plan approval ("implement the plan") is no goal. Without
+  // such a unit it is a request like the others (or earlier work).
   const opening = turns.opening;
-  if (opening && turns.productive.has(opening.id)) {
+  const produced = opening
+    ? uniq(
+        asked
+          .filter((a) => a.id === opening.id && a.how === 'its edits survive here')
+          .map((a) => String(a.change)),
+      ).sort(factOrder)
+    : [];
+  if (
+    opening &&
+    turns.productive.has(opening.id) &&
+    produced.length &&
+    !PLAN_APPROVAL.test(opening.text.trim())
+  ) {
+    const goal = `goal: the first request of the session; its turn produced ${refs(produced, 6).join(', ')}`;
     if (!seen.has(opening.id)) {
       seen.add(opening.id);
       requests.unshift({
         ref: opening.id,
-        kind: 'goal: the first request of the session',
+        kind: goal,
         text: clipText(opening.text, 600),
       });
     } else
       for (const r of requests)
-        if (r.ref === opening.id)
-          r.kind = `goal: the first request of the session; ${String(r.kind)}`;
+        if (r.ref === opening.id) r.kind = `${goal}; ${String(r.kind)}`;
   }
   // Plans and decisions made in turns that produced this PR's edits or commits.
   for (const [id, x] of [...turnFacts].sort((a, b) =>
