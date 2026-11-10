@@ -124,10 +124,7 @@ Reviewers mark a section-per-topic template down as "inventory-like".
   row or a change or commit row ties that behavior to `fn`. A behavior the
   `entry` row lists under "Not in `fn`" belongs to the function named there
   (a caller, a callee): name that function with it, or leave it out.
-- `housekeeping`: at most one closing clause. A built or vendored file (a
-  bundle, `dist/` output) beside changed source is not housekeeping: the
-  `bundle` process row gives one consequence clause (rebuilt after the last
-  source edit, or not) for **Consequences** or **Open points**.
+- `housekeeping`: at most one closing clause.
 
 Omit any part that would be empty or say nothing new; never a heading over a
 single line. State each fact once: if a sentence repeats an earlier one, a
