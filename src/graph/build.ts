@@ -871,6 +871,19 @@ export function buildEvidenceGraph(input: GraphInputs): EvidenceGraph {
       return [t.ref, [...m].slice(-12)];
     }),
   );
+  const gitOpsBy = new Map(trails.map((t) => [t.ref, t.gitOps ?? []]));
+  // The PR as git reports it: the branch it lands from and onto.
+  if (full.pr?.head || full.pr?.base)
+    node('PrTruth', 'pr', {
+      head: full.pr.head || null,
+      base: full.pr.base || null,
+      usedWorkingTree: !!full.pr.usedWorkingTree,
+      dirty: !!full.pr.dirty,
+      commits: full.pr.commits?.length ?? 0,
+      number: full.pr.number ?? null,
+      // The OS the digest (and so the local sessions) ran on.
+      os: process.platform,
+    });
   for (const s of full.sessions) {
     // Failed commands other than checks (checks are Run nodes with outcomes).
     const checkKeys = new Set(
@@ -900,6 +913,10 @@ export function buildEvidenceGraph(input: GraphInputs): EvidenceGraph {
       // The last commands other than checks, and (same position) when each last ran.
       lateCmds: (lateBy.get(s.ref) ?? []).map(([c]) => c),
       lateT: (lateBy.get(s.ref) ?? []).map(([, t]) => t),
+      // Git commands that say how the work landed, and (same position) their kind and time.
+      gitOps: (gitOpsBy.get(s.ref) ?? []).map((x) => x.op),
+      gitKinds: (gitOpsBy.get(s.ref) ?? []).map((x) => x.kind),
+      gitT: (gitOpsBy.get(s.ref) ?? []).map((x) => x.t ?? ''),
     });
     for (const p of s.prompts) factSession.set(p, s.ref);
     for (const p of s.prompts)

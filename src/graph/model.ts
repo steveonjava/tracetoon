@@ -29,7 +29,8 @@ export type NodeLabel =
   | 'Commit'
   | 'CommitClaim'
   | 'Change'
-  | 'HeadRef';
+  | 'HeadRef'
+  | 'PrTruth';
 
 export type RelType =
   | 'IN_SESSION'
@@ -87,7 +88,7 @@ export interface EvidenceGraph {
 export const SCHEMA_DOC = {
   nodes: {
     Session:
-      "id (hashed ref), agent, band (included|ambiguous), score, title, failedCommands (failed non-check commands), failedCommand (the most frequent of them), failedCmds (each failed non-check command as `<cmd> (failed N of M)`, most frequent first), invoked (commands other than checks and file utilities that ran something, as plain words without flags, e.g. `bun src/cli.ts comic art codex`), invokedOut (per invoked command, same position: the words of its output that the PR changed lines also contain, space-separated), lateCmds (the session's last commands in this repo other than checks, as invoked, oldest first), lateT (per late command, same position: when it last ran)",
+      "id (hashed ref), agent, band (included|ambiguous), score, title, failedCommands (failed non-check commands), failedCommand (the most frequent of them), failedCmds (each failed non-check command as `<cmd> (failed N of M)`, most frequent first), gitOps (git commands that say how the work landed: push, new branch, worktree add, cherry-pick, amend/rebase/revert/reset, staged files, `gh run`/`gh pr checks`; no error recorded), gitKinds (per git op, same position: push|branch|worktree|cherry-pick|history|stage|ci), gitT (per git op: when it ran), invoked (commands other than checks and file utilities that ran something, as plain words without flags, e.g. `bun src/cli.ts comic art codex`), invokedOut (per invoked command, same position: the words of its output that the PR changed lines also contain, space-separated), lateCmds (the session's last commands in this repo other than checks, as invoked, oldest first), lateT (per late command, same position: when it last ran)",
     Prompt:
       'id (S#), t, text (up to 1500 chars; expand for full), pushback, ledToEdits, session',
     Decision:
@@ -104,6 +105,8 @@ export const SCHEMA_DOC = {
       'id (<sha>#n), commit, text (one sentence of the commit message), assertsResult (reports a result: commit-message assertion, not a run)',
     HeadRef:
       'id (HR#), kind (still mentions | references | most referenced), term, refs (file:line for stale mentions in docs/config, files for references; capped), count, files, hunk, fresh, definedIn: from one `git grep -w -F` of the head tree, no line contents',
+    PrTruth:
+      'id (pr), head (branch the PR lands from), base, usedWorkingTree, dirty, commits (count), number, os (platform the digest ran on, e.g. linux|darwin|win32): from git and the PR host',
     Change:
       'id (CH#), key (commit:<sha> | prompt:S# | dir:<path>), files, roles, symbols (defined or enclosing), added, removed, branches (added lines that branch or fall back)',
   },

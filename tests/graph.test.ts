@@ -258,6 +258,7 @@ describe('evidence graph', () => {
       'doNotSay',
       'changes',
       'process',
+      'landing',
       'requests',
       'background',
       'commitMessages',
@@ -266,6 +267,11 @@ describe('evidence graph', () => {
       'validation',
       'headScan',
     ]);
+    // How it landed: the PR's branch and base; no push in the logs, so none is claimed.
+    expect(sec('landing').map((x: any) => x.kind)).toEqual(['pr']);
+    expect(sec('landing')[0].fact).toMatch(
+      /^The PR proposes branch `[^`]+` onto `[^`]+` with 1 commit\(s\); the session logs record no `git push`/,
+    );
     const changes = sec('changes');
     const of = (file: string) =>
       changes.find((c: any) => c.where.some((w: string) => w.startsWith(file)));
@@ -1707,7 +1713,8 @@ describe('the brief states recorded process and behavior', () => {
   test('background: the session goal and earlier plans and decisions, outside requests', () => {
     expect(sec('background').map((r) => [r.ref, r.kind, r.text])).toEqual([
       ['S1', "why this work started: the session's first request", 'Earlier work'],
-      // At most the goal and one plan: a decision gives way to the plan.
+      // At most three rows: the goal, then the plan, then the latest decision.
+      ['D0', 'earlier decision in the session', 'Old question'],
       ['P1', 'earlier plan (not approved as written) in the session', 'Limit v1'],
     ]);
     // Optional context: refs render accepts, never required for coverage.
@@ -1724,7 +1731,7 @@ describe('the brief states recorded process and behavior', () => {
     ).toEqual([]);
   });
 
-  test('background: at most two rows, clipped text, acknowledgments are no goal', () => {
+  test('background: at most three rows, clipped text, acknowledgments are no goal', () => {
     const more: EvidenceGraph = structuredClone(graph);
     more.nodes.find((n) => n.id === 'S1')!.props.text = 'go ahead';
     more.nodes.find((n) => n.id === 'S2')!.props.text =
@@ -1742,7 +1749,7 @@ describe('the brief states recorded process and behavior', () => {
     const rows = withGraph(more, (g) => briefParts(g)).sections.find(
       (s) => s.title === 'background',
     )!.rows;
-    expect(rows.map((r) => r.ref)).toEqual(['S2', 'P1']);
+    expect(rows.map((r) => r.ref)).toEqual(['S2', 'D8', 'P1']);
     expect(String(rows[0]!.text).length).toBe(600);
     expect(String(rows[0]!.text).endsWith('…')).toBe(true);
     // With no earlier plan, the latest decision, clipped.
@@ -1751,7 +1758,7 @@ describe('the brief states recorded process and behavior', () => {
     const noPlan = withGraph(more, (g) => briefParts(g)).sections.find(
       (s) => s.title === 'background',
     )!.rows;
-    expect(noPlan.map((r) => r.ref)).toEqual(['S2', 'D8']);
+    expect(noPlan.map((r) => r.ref)).toEqual(['S2', 'D7', 'D8']);
     expect(String(noPlan[1]!.text).length).toBe(400);
   });
 
@@ -1769,26 +1776,27 @@ describe('the brief states recorded process and behavior', () => {
     );
     const parts = withGraph(cut, (g) => briefParts(g)).sections;
     const rows = parts.find((s) => s.title === 'background')!.rows;
-    // No goal: the two latest plans (decisions give way to plans).
+    // No goal: the two plans, then the latest decision.
     expect(rows.map((r) => [r.ref, r.kind])).toEqual([
       [
         'P1',
         "plan (not approved as written) in the session (the prompt before it wasn't captured)",
       ],
+      ['D1', "decision in the session (the prompt before it wasn't captured)"],
       ['P2', "plan (approved) in the session (the prompt before it wasn't captured)"],
     ]);
     const plan = parts
       .find((s) => s.title === 'process')!
       .rows.find((r) => r.kind === 'plan')!;
     expect(plan.fact).toBe(
-      "No plan or decision in this PR's own turns; the session recorded P1 (plan not approved as written), P2 (approved plan) outside them: see background.",
+      "No plan or decision in this PR's own turns; the session recorded P1 (plan not approved as written), D1 (decision), P2 (approved plan) outside them: see background.",
     );
-    expect(plan.cites).toEqual(['P1', 'P2']);
+    expect(plan.cites).toEqual(['P1', 'D1', 'P2']);
     expect(
       parts
         .find((s) => s.title === 'doNotSay')!
         .rows.find((r) => r.kind === 'recorded requests')?.text,
-    ).toBe("Plans were recorded (P1, P2): don't say none was recorded.");
+    ).toBe("Plans/decisions were recorded (P1, D1, P2): don't say none was recorded.");
     // Before a captured prompt, a turnless plan is the tail of earlier work.
     const tail: EvidenceGraph = structuredClone(graph);
     tail.nodes.push(
@@ -1816,7 +1824,7 @@ describe('the brief states recorded process and behavior', () => {
       [
         'PR3',
         'decision',
-        '1 question(s) answered by the user: D1 (turn S3), record cut off.',
+        '1 question(s) answered by the user: D1 (turn S3), record cut off: Which limit? = "12, unless the…".',
       ],
       [
         'PR4',

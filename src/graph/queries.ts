@@ -19,6 +19,7 @@ import {
 import { fileRole as pathRole } from '../digest/build.ts';
 import { isNeighborhood, type BriefLayout } from './layout.ts';
 import { addSearchEvidence, fillSearchLinks } from './searchBrief.ts';
+import { landingRows, scopeRows } from './coverage.ts';
 import {
   capLimits,
   entryRow,
@@ -549,18 +550,43 @@ const includedSession = (g: GraphEngine, id: unknown) =>
   g.run(`MATCH (s:Session {band: 'included'}) WHERE s.id = $id RETURN s.id AS id`, {
     id: String(id),
   }).rows.length > 0;
-/** At most this many background rows: the goal and one plan (else decision). */
-const MAX_BACKGROUND = 2;
+/** At most this many background rows: the goal, one user correction, and plans (else decisions). */
+const MAX_BACKGROUND = 3;
+
+/** A user message that corrects or redirects the agent ("don't…", "instead", "no, …"). */
+export const REDIRECT =
+  /(?:^|[.!?]\s+)no[,.!]\s|\b(?:don'?t|do not|instead|rather than|rather\b|stop|not that|that's wrong|that is wrong|wrong approach|undo|revert that|shouldn'?t|should not)\b/i;
+
+/** Two texts that say the same thing: equal once normalized, or nearly all words shared. */
+export function nearDuplicate(a: string, b: string): boolean {
+  const norm = (x: string) =>
+    x
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+  const x = norm(a);
+  const y = norm(b);
+  if (!x || !y) return false;
+  if (x === y || x.startsWith(y) || y.startsWith(x)) return true;
+  const wx = new Set(x.split(' ').filter((w) => w.length > 2));
+  const wy = new Set(y.split(' ').filter((w) => w.length > 2));
+  if (wx.size < 4 || wy.size < 4) return false;
+  let shared = 0;
+  for (const w of wx) if (wy.has(w)) shared++;
+  return shared / Math.max(wx.size, wy.size) >= 0.85;
+}
 
 /**
  * How the work came about, from the included sessions, when this PR's own
- * turns don't show it: each session's goal (its first substantive prompt) and
- * the plans and decisions of earlier turns, which `requests` leaves out because
- * they didn't produce this PR's edits. Facts the writer covers in a sentence
- * on why the work started, attributed to the session (the first request is
- * the session's, which this PR's own turns may have narrowed); refs already
- * in `requests` are skipped. At most two rows, one motive sentence's worth:
- * the goal, then the latest earlier plan (else decision).
+ * turns don't show it: each session's goal (its first substantive prompt),
+ * one user correction or redirect from an earlier turn, and the plans and
+ * decisions of earlier turns, which `requests` leaves out because they didn't
+ * produce this PR's edits. Facts the writer covers in a short "how this came
+ * about" passage, attributed to the session (the first request is the
+ * session's, which this PR's own turns may have narrowed); refs already in
+ * `requests` are skipped. At most three rows: the goal, a correction, then
+ * the latest earlier plans (else decisions); a plan repeating another's text
+ * shows once, and a decision shows its answer.
  */
 export function backgroundRows(
   g: GraphEngine,
@@ -635,17 +661,59 @@ export function backgroundRows(
       text: clipText(String(x.text ?? '').trim(), 400),
       t: x.t,
     }));
-  // One motive sentence's worth: the goal, then the latest earlier plan (its
-  // approval or rejection says how the work was steered), else the latest decision.
+  // One user correction from an earlier turn of a session that produced this
+  // PR: how the user steered the work, outside the turns `requests` shows.
+  const goalRefs = new Set(goals.map((x) => String(x.ref)));
+  const correction = prompts
+    .filter((p) => {
+      const id = String(p.id);
+      const until = lastProductive.get(String(p.session));
+      return (
+        !!until &&
+        !exclude.has(id) &&
+        !goalRefs.has(id) &&
+        !turns.productive.has(id) &&
+        String(p.t ?? '') < until &&
+        substantive(p.text) &&
+        REDIRECT.test(String(p.text ?? ''))
+      );
+    })
+    .sort(byTime)
+    .at(-1);
+  const steer = correction
+    ? [
+        {
+          ref: String(correction.id),
+          kind: 'user correction or redirect in an earlier turn of the session',
+          text: clipText(String(correction.text ?? '').trim(), 400),
+          t: correction.t,
+        },
+      ]
+    : [];
+  // Plans with the same text (a plan re-sent, approved on the second try)
+  // show once: the latest, whose approval stands.
+  const deduped = earlier.filter(
+    (x, i) =>
+      !x.kind.includes('plan') ||
+      !earlier
+        .slice(i + 1)
+        .some((y) => y.kind.includes('plan') && nearDuplicate(x.text, y.text)),
+  );
+  // The goal, the correction, then the latest earlier plans (their approval or
+  // rejection says how the work was steered), else the latest decisions.
   const goalRows = goals.slice(0, MAX_BACKGROUND - 1);
-  const room = MAX_BACKGROUND - goalRows.length;
-  const plans = earlier.filter((x) => x.kind.includes('plan'));
-  const others = earlier.filter((x) => !x.kind.includes('plan'));
-  const factRows =
-    room > 0
-      ? [...plans.slice(-room), ...others.slice(-room)].slice(0, room).sort(byTime)
-      : [];
-  return [...goalRows, ...factRows].map(({ ref, kind, text }) => ({ ref, kind, text }));
+  const steerRows = steer.slice(0, MAX_BACKGROUND - goalRows.length);
+  const room = MAX_BACKGROUND - goalRows.length - steerRows.length;
+  const plans = deduped.filter((x) => x.kind.includes('plan'));
+  const others = deduped.filter((x) => !x.kind.includes('plan'));
+  const planRows = room > 0 ? plans.slice(-room) : [];
+  const left = room - planRows.length;
+  const factRows = [...planRows, ...(left > 0 ? others.slice(-left) : [])].sort(byTime);
+  return [...goalRows, ...steerRows, ...factRows].map(({ ref, kind, text }) => ({
+    ref,
+    kind,
+    text,
+  }));
 }
 
 /**
@@ -759,7 +827,7 @@ function processRows(
     .run(
       `MATCH (x)-[:IN_TURN]->(p:Prompt) WHERE x:Plan OR x:Decision
        RETURN x.id AS id, labels(x)[0] AS label, x.approved AS approved, x.t AS t,
-              x.text AS title, x.truncated AS truncated, p.id AS turn`,
+              x.text AS title, x.answers AS answers, x.truncated AS truncated, p.id AS turn`,
     )
     .rows.filter((x) => inScope(x.turn))
     .sort(
@@ -826,9 +894,13 @@ function processRows(
       `${decisions.length} question(s) answered by the user: ${decisions
         .map(
           (d) =>
-            `${String(d.id)} (turn ${String(d.turn)})${d.truncated ? ', record cut off' : ''}`,
+            `${String(d.id)} (turn ${String(d.turn)})${d.truncated ? ', record cut off' : ''}${
+              d.answers || d.title
+                ? `: ${clipText(String(d.answers || d.title).trim(), 160)}`
+                : ''
+            }`,
         )
-        .join(', ')}.`,
+        .join('; ')}.`,
       decisions.map((d) => String(d.id)),
     );
 
@@ -1445,7 +1517,7 @@ export function briefParts(
     limits.push({
       change: null,
       kind: 'open',
-      limit: `"${clipText(m.text, 140)}" comes only from commit ${String(m.commit)}'s message: attribute it to that message, and don't say what any run did or didn't show.`,
+      limit: `"${clipText(m.text, 140)}" comes only from commit ${String(m.commit)}'s message: attribute it to that message, and don't state a run result it doesn't show; where a scope limit says no run or measurement is recorded, "the effect was not measured" may be said, tagged with that limit.`,
     });
   // The last run of a command with no captured result is open when it is what
   // the session ended on (no later edits) or the last run of its kind. An
@@ -1508,6 +1580,21 @@ export function briefParts(
   // Built or vendored output beside its changed source: a consequence, not
   // housekeeping; an open point when the source changed after it was built.
   const bundle = bundleRow(g, fileRole);
+  // How the work came about, computed here: its texts feed the scope limits.
+  const background = backgroundRows(
+    g,
+    turns,
+    new Set(requests.map((r) => String(r.ref))),
+  );
+  // Platforms named with no run on them, effects claimed with no measurement,
+  // manual steps: from the request, plan, background and commit texts.
+  const scope = scopeRows(g, [
+    ...[...requests, ...background].map((r) => ({
+      ref: String(r.ref),
+      text: String(r.text ?? ''),
+    })),
+    ...commitText.map((r) => ({ ref: String(r.ref), text: String(r.text ?? '') })),
+  ]);
   limits.splice(
     0,
     limits.length,
@@ -1518,7 +1605,16 @@ export function briefParts(
         ...(bundle?.stale ? [{ change: null, kind: 'open', limit: bundle.fact }] : []),
         ...failedPublishRows(g),
       ],
-      remotePathRows(hunkRows, fileRole, scopedRuns, liveEvidence(g)),
+      // Scope rows go first when the cap is reached, then remote paths.
+      [
+        ...remotePathRows(hunkRows, fileRole, scopedRuns, liveEvidence(g)),
+        // A fix with no passing run is already said by a no-pass row.
+        ...scope.filter(
+          (r) =>
+            !/^No passing run that shows the fix/.test(String(r.limit)) ||
+            !(noPass || limits.some((l) => /no passing/i.test(String(l.limit ?? '')))),
+        ),
+      ],
     ),
   );
   limits.forEach((l, i) => (l.ref = `L${i + 1}`));
@@ -1575,11 +1671,6 @@ export function briefParts(
       files: refs(generated, 6),
     });
 
-  const background = backgroundRows(
-    g,
-    turns,
-    new Set(requests.map((r) => String(r.ref))),
-  );
   const process = processRows(
     g,
     turns,
@@ -1608,6 +1699,7 @@ export function briefParts(
   // Where each behavior lives: commit sentences → the function that does it.
   const owners = ownerRows(g, links);
 
+  const landing = landingRows(g);
   // Open points first: writers often read only the head of the output.
   const sections: Section[] = [
     section('limits', ['ref', 'change', 'kind', 'limit'], limits),
@@ -1633,6 +1725,10 @@ export function briefParts(
       ? [section('owners', ['change', 'behavior', 'function', 'file', 'cites'], owners)]
       : []),
     section('process', ['ref', 'kind', 'fact', 'cites'], process),
+    // Only when it has rows: how the work landed, as git and the logs record it.
+    ...(landing.length
+      ? [section('landing', ['ref', 'kind', 'fact', 'cites'], landing)]
+      : []),
     section('requests', ['ref', 'kind', 'text', 'truncated'], requests),
     section('background', ['ref', 'kind', 'text'], background),
     section('commitMessages', ['ref', 'text', 'implementedBy'], commitText),

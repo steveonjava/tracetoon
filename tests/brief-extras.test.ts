@@ -494,13 +494,20 @@ describe('published bodies carry no brief refs', () => {
   });
 });
 
-test('drafting guidance: word target, one motive sentence, the entry row', () => {
+test('drafting guidance: word target, how this came about, the entry row', () => {
   const drafting = readFileSync(
     resolve(import.meta.dir, '../plugin/skills/tracetoon/references/drafting.md'),
     'utf8',
   );
   expect(drafting).toContain('250–400 words for a typical PR');
-  expect(drafting).toContain('up to about 600');
+  expect(drafting).toMatch(/60 more words per unit beyond six, up to about 900/);
+  // One old → new problem sentence and at least one consequences clause.
+  expect(drafting).toMatch(/one sentence on the\s+problem, old → new/);
+  expect(drafting).toMatch(
+    /\*\*Consequences\*\* worth a reviewer's attention, at least one clause/,
+  );
+  // A scope limit allows "the effect was not measured", tagged.
+  expect(drafting).toMatch(/"the\s+effect was not measured"[\s\S]{0,120}tagged/);
   // Limits keep their scope; prompt and skill text is behavior; no meta text.
   expect(drafting).toMatch(/never widen it: not to "no\s+tests were run"/);
   // Environment scope is allowed only with a citation.
@@ -512,7 +519,12 @@ test('drafting guidance: word target, one motive sentence, the entry row', () =>
     /agent-instruction text that changes what users or agents are told/,
   );
   expect(drafting).toMatch(/No meta text in the body/);
-  expect(drafting).toMatch(/one motive sentence at most: never a list/);
+  expect(drafting).not.toMatch(/one motive sentence at most/);
+  expect(drafting).toMatch(
+    /\*\*How this came about\*\*[\s\S]{0,200}attributed to the record/,
+  );
+  expect(drafting).toMatch(/Never a list or timeline of session events/);
+  expect(drafting).toMatch(/`landing`, when present/);
   expect(drafting).toMatch(/`entry` process row names/);
 });
 

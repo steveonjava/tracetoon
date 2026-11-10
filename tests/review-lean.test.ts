@@ -181,6 +181,18 @@ describe('lean review packet brief rows', () => {
           },
         ],
       },
+      {
+        title: 'landing',
+        columns: ['ref', 'kind', 'fact', 'cites'],
+        rows: [
+          {
+            ref: 'LD1',
+            kind: 'push',
+            fact: 'The session ran `git push origin topic` with no error recorded.',
+            cites: [],
+          },
+        ],
+      },
     ];
     const text = leanPacket({
       runId: 'r3',
@@ -203,6 +215,11 @@ describe('lean review packet brief rows', () => {
     // background comes after requests, process last
     expect(text.indexOf('background (')).toBeGreaterThan(text.indexOf('requests ('));
     expect(text.indexOf('process (')).toBeGreaterThan(text.indexOf('background ('));
+    // How it landed reaches the reviewer too, after process.
+    expect(text).toContain(
+      '- LD1 (push): The session ran `git push origin topic` with no error recorded.',
+    );
+    expect(text.indexOf('landing (')).toBeGreaterThan(text.indexOf('process ('));
   });
 
   test('a review line names the reviewer model, or says it was not recorded', () => {

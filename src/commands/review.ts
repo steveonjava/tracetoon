@@ -267,6 +267,12 @@ function briefLines(
     for (const r of process)
       out.push(`- ${show(r.ref)} (${show(r.kind)}): ${oneLine(r.fact, 300)}`);
   }
+  const landing = rows('landing');
+  if (landing.length) {
+    out.push('landing (how the work landed, as git and the session logs record it):');
+    for (const r of landing)
+      out.push(`- ${show(r.ref)} (${show(r.kind)}): ${oneLine(r.fact, 300)}`);
+  }
   return out.length ? out : ['(The brief has no rows for this run.)'];
 }
 

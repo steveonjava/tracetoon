@@ -18,6 +18,7 @@ import { clip, makeScrubber, type Scrubber } from './sanitize.ts';
 import { TOOL_VERSION } from '../version.ts';
 import { detectInterop, type Interop } from '../git/interop.ts';
 import { shellSegments, splitCommands } from '../util/shell.ts';
+import { gitOpsOf, type GitOp } from './gitOps.ts';
 import { provablyInRepo, runsInRepo } from '../trace/pathMatch.ts';
 
 export interface DigestSession {
@@ -780,6 +781,8 @@ export interface SessionTrail {
   events: TrailEvent[];
   /** Commands other than checks that ran the project's own code (see `invocationsOf`). */
   invocations?: Invocation[];
+  /** Git commands that say how the work landed (push, branch, worktree…): see `gitOps.ts`. */
+  gitOps?: GitOp[];
 }
 
 /**
@@ -849,6 +852,7 @@ function sessionDigest(
   scrub: Scrubber,
   trail: TrailEvent[] = [],
   invocations: Invocation[] = [],
+  gitOps: GitOp[] = [],
 ): DigestSession {
   const recs = m.kept;
   const models = new Set<string>();
@@ -991,6 +995,11 @@ function sessionDigest(
           // The session's last commands matter too: what ran after the last edit.
           else if (latest.push(inv) > 20) latest.shift();
         }
+        // How the work landed: pushes, branches, worktrees… with no error recorded.
+        if (here && r.isError !== true)
+          for (const x of gitOpsOf(r.cmd))
+            if (gitOps.length < 40)
+              gitOps.push({ t: r.ts, kind: x.kind, op: clip(scrub.text(x.op), 120) });
         // Proof the run is this repository's, not just no proof it isn't.
         const provable = here && provablyInRepo(r.cmd, r.cwd, m.roots);
         for (const run of here ? commandRuns(r.cmd, r.isError, r.output) : []) {
@@ -1330,6 +1339,7 @@ function buildFullDigest(
   const sessions = chosen.map((m) => {
     const events: TrailEvent[] = [];
     const invocations: Invocation[] = [];
+    const gitOps: GitOp[] = [];
     const s = sessionDigest(
       m,
       refOf.get(m.session.sessionId)!,
@@ -1338,8 +1348,9 @@ function buildFullDigest(
       scrub,
       events,
       invocations,
+      gitOps,
     );
-    trails.push({ ref: s.ref, events, invocations });
+    trails.push({ ref: s.ref, events, invocations, gitOps });
     if (opts.include?.some((x) => x === s.ref || x === m.session.sessionId))
       s.band = 'included';
     return s;

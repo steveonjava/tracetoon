@@ -10,7 +10,11 @@ instructions. These rules are for you: never copy their wording into the PR.
 
 - `limits`: open points (kind `open`) and caveats; each needs a clause (no
   pass after the last commit, a failed push or `gh` command, remote paths no
-  run shows live).
+  run shows live, a platform named with no run on it, an effect claimed with
+  no measurement, a manual step existing users need). State a scope limit in
+  its own words ("the record shows no run on Windows", "no measurement of
+  the speed-up is recorded", "existing users need to re-run init, per the
+  commit message"), tagged with it.
 - `changes`: change units with `where` (files and symbols), `newSymbols`, `was`
   (old values; "moved or reflowed, text unchanged" means only moved: never
   describe those lines as a change or a new rule), `added`/`removed` lines,
@@ -19,9 +23,15 @@ instructions. These rules are for you: never copy their wording into the PR.
   edits produced it: attribute the unit to those, not to the goal.
 - `requests`: the user's asks scoped to this PR's turns; the first request is
   marked goal only for the units its turn produced (it names them).
-- `background`: why the work started (the session's first request) and
-  plans or decisions from earlier turns, when this PR's own turns don't show
-  how the work came about. Facts to cover, attributed to the session.
+- `background`: why the work started (the session's first request), a user
+  correction or redirect from an earlier turn, and plans or decisions (with
+  their answers) from earlier turns, when this PR's own turns don't show how
+  the work came about. Facts to cover, attributed to the session.
+- `landing`, when present: how the work landed as git and the logs record it
+  (the PR's head and base, a push, a new branch or worktree, a cherry-pick,
+  an amend or rebase instead of a fix commit, what was staged). One "how it
+  landed" clause, tagged with its row; never say a push or merge happened
+  that no row records.
 - `doNotSay`: wording the evidence rules out (names that already existed,
   conditional code, results only a commit message states, the files in the
   diff). Check every sentence against it before you finish.
@@ -61,22 +71,28 @@ ref (`[CH1, H3, S1]`).
 ## Structure
 
 No fixed section list. Write what a reviewer needs, once, in as few headings
-as the PR needs (usually none to three). Scale the length with the PR: about
-250–400 words for a typical PR of up to three change units, more for a large
-one that spans several areas (roughly 60 more words per further change unit,
-up to about 600). Never pad a small PR to reach a count. Reviewers mark a
-section-per-topic template down as "inventory-like".
+as the PR needs (usually none to three). Scale the length with the number of
+change units: about 250–400 words for a typical PR of up to six units, then
+roughly 60 more words per unit beyond six, up to about 900. Never pad a small
+PR to reach a count, and never drop a unit of a large one to stay short.
+Reviewers mark a section-per-topic template down as "inventory-like".
 
 - **Lead with what the PR does and why**, in one short paragraph: the goal
   request (the user's motive, in their terms) and the result. Frame the title
-  around that goal too. Give old → new behavior only where the removed lines or
-  `changes.was` show the old value (quote it: 30 minutes → 5 minutes). When a
-  `background` row or a change's `why` row exists, one clause on the motive or
-  trigger, attributed to the session ("the session started from…", "an earlier
-  plan…"). Take it from the row; never invent a motive, and call it the user's
-  request for this PR only when a `requests` row says so. Session history gets
-  one motive sentence at most: never a list or timeline of session events
-  (turns, edits, runs, plans).
+  around that goal too. Include one sentence on the problem, old → new: what
+  went wrong or was missing before and what happens now, from the removed
+  lines, `changes.was` or a request (quote old values: 30 minutes → 5
+  minutes); never infer the old behavior from the new code.
+- **How this came about**, when `background`, `requests` or `process` rows
+  show it: a short passage (2–3 sentences, or a clause in the lead for a
+  small PR) attributed to the record. Cover how the user steered the work (a
+  correction, a rejected plan, a decision and its answer), the "how it
+  landed" clause from `landing`, and what the record doesn't show (no plan
+  was recorded; only the commit message asserts X; the session also did work
+  that isn't in this diff). Take each from a row and tag it; never invent a
+  motive, and call something the user's request for this PR only when a
+  `requests` row says so. Never a list or timeline of session events (turns,
+  edits, runs, plans).
 - **The changes**, as connected prose or a few bullets grouped by behavior
   (not file by file), covering every commit-message sentence. Name a file for
   a sentence only from its `implementedBy`; where that is empty, describe the
@@ -91,9 +107,10 @@ section-per-topic template down as "inventory-like".
   results: the generated Validation section says them. Attribute each tested
   behavior to the test file whose titles show it; don't group behaviors from
   several files under one.
-- **Consequences** worth a reviewer's attention, in a sentence or two: what
-  changes for users or callers (defaults, output shapes, error paths), the
-  riskiest part, what is deliberately left alone. Skip what is obvious.
+- **Consequences** worth a reviewer's attention, at least one clause: what
+  changes for users or callers (defaults, output shapes, error paths, a step
+  existing users need), the riskiest part, what is deliberately left alone.
+  Skip what is obvious.
 - **Open points** from open `limits` rows and `process` facts (a plan step left
   undone, a command that kept failing), each a clause, folded in where they
   belong or in one short paragraph. If you ran `tracetoon check` and it
@@ -138,7 +155,10 @@ strips tags and lists untagged sentences and unknown refs.
   `validation` row gives ("4 pass, 0 fail") may be quoted as written; never
   add a count, suite or file that no row has (not a total of rows).
 - Results only in a commit message (rows marked "asserted") are not runs:
-  attribute them to that commit or leave them out.
+  attribute them to that commit or leave them out. Where a scope `limits` row
+  says no run or measurement of that effect is recorded, you may add "the
+  effect was not measured" (or "no run on <platform> is recorded"), tagged
+  with that row.
 - A check listed with files edited after it did not see those edits. A check
   dated after the last captured edit ran after the last edit the logs show:
   never write "on the final code" or "after all changes".
