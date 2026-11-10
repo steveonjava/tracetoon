@@ -145,9 +145,7 @@ strips tags and lists untagged sentences and unknown refs.
 
 - Write no test, build, lint or typecheck results yourself; the marker covers
   them. Don't repeat in prose what Validation says about runs, and never list
-  the runs or checks. One exception: one sentence on the last full-suite
-  result and whether it ran after the last captured edit, as a `process` or
-  `validation` row states it, tagged with that row.
+  the runs or checks.
 - Quote run results exactly as rows give them. A count a `process` or
   `validation` row gives ("4 pass, 0 fail") may be quoted as written; never
   add a count, suite or file that no row has (not a total of rows).

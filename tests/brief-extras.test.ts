@@ -881,3 +881,15 @@ describe('built output beside its changed source', () => {
     ).not.toMatch(/committed output|built or vendored/);
   });
 });
+
+test('drafting.md: no run-prose exception and no bundle consequence rule', () => {
+  const drafting = readFileSync(
+    resolve(import.meta.dir, '../plugin/skills/tracetoon/references/drafting.md'),
+    'utf8',
+  );
+  // Counts a row gives may still be quoted; no sentence of run prose of its own.
+  expect(drafting).toMatch(/A count a `process` or\s+`validation` row gives/);
+  expect(drafting).not.toMatch(/last full-suite\s+result/);
+  expect(drafting).not.toMatch(/`bundle` process row/);
+  expect(drafting).toMatch(/- `housekeeping`: at most one closing clause\.\n/);
+});
