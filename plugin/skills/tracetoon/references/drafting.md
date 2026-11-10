@@ -94,12 +94,6 @@ section-per-topic template down as "inventory-like".
   undone, a command that kept failing), each a clause, folded in where they
   belong or in one short paragraph. If you ran `tracetoon check` and it
   passed, don't repeat a "no passing run after the last commit" limit.
-  Without a passing `tracetoon check`, the session's runs are history: say
-  they are historical session runs, not re-run on the final content (never
-  "the last commit passed"), even when a process row says no captured edit
-  came between. Don't turn this into a claim that coverage is missing ("not
-  proven to cover", "does not establish coverage"): a run with no edit after
-  it may well have tested the committed content.
 - **Where to start and the feedback wanted**, in one or two lines at the end:
   the function and file the `entry` process row names ("start at `fn` in
   `file`"; without one, a file from `changes.where`), not the largest file or

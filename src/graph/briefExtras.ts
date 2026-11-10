@@ -68,6 +68,8 @@ export function noPassAfterCommitRow(g: GraphEngine, scopedRuns: Row[]): Row | u
   const quiet = passed
     .filter((r) => r.t && !editedBetween(r).length)
     .sort((a, b) => String(a.t ?? '').localeCompare(String(b.t ?? '')));
+  // Ablation abl-b: no historical-run limit (r2 behavior: a quiet pass covers the commit).
+  if (quiet.length) return undefined;
   if (quiet.length) {
     const r = quiet.filter((x) => x.kind === 'test').at(-1) ?? quiet.at(-1)!;
     return {

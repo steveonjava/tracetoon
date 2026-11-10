@@ -32,10 +32,7 @@ symbol's callers). Do not read other run files, the brief query, or guides.
    environment-scope statement ("verified only with fakes", "tried only on
    the session's OS") is not a widened limit: accept it when its tag points
    to a brief row, commit sentence, test file or request that supports it;
-   flag it `unsupported` only when untagged or its tag doesn't back it. A
-   body that says a session run with no edit after it is "not proven to
-   cover" the committed content is `overstated` (it is historical, not
-   disproven). A body that calls session runs current ("passes on the final commit")
+   flag it `unsupported` only when untagged or its tag doesn't back it. A body that calls session runs current ("passes on the final commit")
    without a passing `tracetoon check` is `overstated`. A check that
    failed because the environment lacked a tool or network could not run
    there; flag a body that calls it a failure of the code.
