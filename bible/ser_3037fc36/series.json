@@ -1,0 +1,47 @@
+{
+  "v": 1,
+  "series": "ser_3037fc36",
+  "title": "Pull Request Pets",
+  "theme": "pets",
+  "style": "Sunday-strip cartoon comic panel, cute cartoon animal characters, clean confident line art, warm flat colors, cozy home office",
+  "negative": "no text, no letters, no words, no speech bubbles, no captions, no signatures, no watermarks, no logos, no real people",
+  "cast": [
+    {
+      "id": "sam",
+      "name": "Sam",
+      "role": "human",
+      "species": "human",
+      "description": "a friendly developer in a hoodie with headphones around their neck",
+      "palette": [
+        "#7A5C99",
+        "#F2E6FF",
+        "#3D2B52"
+      ]
+    },
+    {
+      "id": "glitch",
+      "name": "Glitch",
+      "role": "extra",
+      "species": "beetle",
+      "description": "a tiny mischievous red beetle with a smug grin",
+      "palette": [
+        "#C0392B",
+        "#FADBD8",
+        "#641E16"
+      ]
+    },
+    {
+      "id": "kit",
+      "name": "Kit",
+      "role": "agent",
+      "agent": "Claude Code",
+      "species": "fox",
+      "description": "a small orange fox with a cream chest, big curious eyes and a fluffy tail, wears a tiny terracotta scarf",
+      "palette": [
+        "#E8833A",
+        "#FFF1E0",
+        "#B4532A"
+      ]
+    }
+  ]
+}

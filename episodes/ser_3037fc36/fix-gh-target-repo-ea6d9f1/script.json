@@ -1,0 +1,105 @@
+{
+  "v": 2,
+  "title": "Wrong Address",
+  "headline": "WRONG ADDRESS",
+  "synopsis": "The PR was written for the fork but posted to gh's default address. Now every envelope is stamped with one repo, and a changed address is returned to sender.",
+  "altText": "Four panels. Sam hands Kit the fox a letter for the fork. The letter drops into a mailbox labelled UPSTREAM. Kit stamps --repo on every envelope. Glitch the beetle returns a readdressed envelope, stamped RETURN TO SENDER.",
+  "format": "4koma",
+  "layout": "four equal panels in a vertical stack, a mailbox recurring in each",
+  "style": "ligne-claire",
+  "palette": "full-color",
+  "continuity": {
+    "mode": "standalone"
+  },
+  "panels": [
+    {
+      "scene": "Sam hands Kit a sealed envelope marked PR in a tidy post office",
+      "characters": [
+        {
+          "cast": "sam",
+          "position": "left",
+          "expression": "happy"
+        },
+        {
+          "cast": "kit",
+          "position": "right",
+          "expression": "proud"
+        }
+      ],
+      "dialogue": [
+        {
+          "speaker": "sam",
+          "text": "Post it to my fork!"
+        }
+      ]
+    },
+    {
+      "scene": "Kit drops the envelope into a street mailbox; the mailbox is labelled UPSTREAM and the envelope has no address on it",
+      "characters": [
+        {
+          "cast": "kit",
+          "position": "left",
+          "expression": "surprised"
+        }
+      ],
+      "dialogue": [
+        {
+          "speaker": "caption",
+          "text": "gh's default address said otherwise."
+        },
+        {
+          "speaker": "caption",
+          "kind": "sign",
+          "text": "UPSTREAM"
+        }
+      ]
+    },
+    {
+      "scene": "Kit at a desk stamps the same address on a tall pile of envelopes with a rubber stamp",
+      "characters": [
+        {
+          "cast": "kit",
+          "position": "center",
+          "expression": "determined"
+        }
+      ],
+      "dialogue": [
+        {
+          "speaker": "kit",
+          "text": "One address, on every envelope."
+        },
+        {
+          "speaker": "caption",
+          "kind": "sfx",
+          "text": "--repo"
+        }
+      ]
+    },
+    {
+      "scene": "Glitch the beetle holds up an envelope with a crossed-out address and a big RETURN TO SENDER stamp; Sam and Kit look pleased",
+      "characters": [
+        {
+          "cast": "glitch",
+          "position": "center",
+          "expression": "worried"
+        },
+        {
+          "cast": "sam",
+          "position": "left",
+          "expression": "happy"
+        },
+        {
+          "cast": "kit",
+          "position": "right",
+          "expression": "happy"
+        }
+      ],
+      "dialogue": [
+        {
+          "speaker": "glitch",
+          "text": "Address changed. Return to sender."
+        }
+      ]
+    }
+  ]
+}
