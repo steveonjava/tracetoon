@@ -178,11 +178,9 @@ describe('the brief, end to end', () => {
         .bash('bun test && bun x tsc --noEmit', '3 pass\n0 fail')
         .bash('bun run typecheck 2>&1 | tail -3', '$ tsc --noEmit'),
     );
-    // Checks ran, none statable: not "found nothing", which read as "no checks
-    // ran", and not an empty section either.
-    expect(validation).toEqual([
-      "- The session logs record check runs, but Tracetoon can't pin a result line on any of them, so it states none here.",
-    ]);
+    // Checks ran, none statable: no "found nothing" line, which writers read
+    // as "no checks ran".
+    expect(validation).toEqual([]);
     expect(limits.some((l) => l.includes('its exit status was hidden by a pipe'))).toBe(
       true,
     );

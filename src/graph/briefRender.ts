@@ -238,12 +238,8 @@ export function validationSection(b: BriefParts): string {
     );
   if (!lines.length && !ranChecks)
     lines.push('- No test, typecheck or lint run appears in the session logs.');
-  // Checks ran but none can be stated and nothing was checked on the
-  // submitted content: say so rather than leave the section empty (r5).
-  else if (!lines.length)
-    lines.push(
-      "- The session logs record check runs, but Tracetoon can't pin a result line on any of them, so it states none here.",
-    );
+  // Checks ran but none can be stated: no line. A "can't read a result" line
+  // was restated by writers as "no checks ran" (round 2, 24 judged errors).
   if (others.length && stale)
     lines.push(
       `- After the last captured edit the session also ran ${others.map((c) => `\`${c}\``).join(', ')}, which Tracetoon does not classify as checks.`,
