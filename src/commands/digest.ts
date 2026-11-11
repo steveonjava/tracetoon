@@ -102,6 +102,9 @@ export interface DigestOpts extends ScanOpts {
   graphSearch?: string;
 }
 
+const originRepo = (truth: { remote?: { owner: string; name: string } }) =>
+  truth.remote ? `${truth.remote.owner}/${truth.remote.name}` : undefined;
+
 export function digestHash(d: TraceDigest): string {
   const { generatedAt: _ignored, ...stable } = d;
   return createHash('sha256').update(JSON.stringify(stable)).digest('hex').slice(0, 12);
@@ -314,14 +317,15 @@ export function contextCmd(
   const policy = detectAiPolicy(truth.toplevel);
   const titleRules = readTitleRules(truth.toplevel, {
     offline: opts.offline,
-    repo: truth.remote ? `${truth.remote.owner}/${truth.remote.name}` : undefined,
+    repo: truth.target?.repo ?? originRepo(truth),
   });
   const config = loadConfig(truth.toplevel);
   // Compact creative choices help this comic differ. Skipped when comics are off.
   const recent =
     config.comic !== 'off' ? recentComics(truth, { offline: opts.offline }) : [];
   const ctx = {
-    repo: truth.remote ? `${truth.remote.owner}/${truth.remote.name}` : null,
+    repo: truth.target?.repo ?? originRepo(truth) ?? null,
+    target: truth.target ?? null,
     head: truth.head,
     base: truth.base,
     template: template ?? null,
