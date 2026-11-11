@@ -4,5 +4,24 @@
     "repository": "https://github.com/Tingsters/Showtail.git",
     "revision": "dd0b6f40a09e206c1571a0440f2bdc2b78222c18",
     "packageTree": "6eb00aad7a5c9aa7d54b6dbe3bdb1cd4cb17957e"
+  },
+  "relate": {
+    "repository": "https://github.com/relatedb/relate.git",
+    "tag": "v0.1.2-5-gaa0f79e",
+    "revision": "aa0f79e688f5ee9b87fa7aaa239aafeac9d8b1e4",
+    "license": "Apache-2.0",
+    "note": "Relate 0.1.2 plus five post-release commits on main (git describe v0.1.2-5-gaa0f79e).",
+    "build": {
+      "script": "scripts/build-wasm.sh --mode release",
+      "rust": "1.88.0",
+      "wasmBindgen": "0.2.128",
+      "binaryen": "133"
+    },
+    "files": {
+      "plugin/skills/tracetoon/assets/relate.wasm": "eedb5e5323a7809b43995e8a15d256254c4d1f6a0df08eab7b58d0ec0686fdd4",
+      "src/graph/vendor/relate.js": "3f96727c1ea76d95bdf6e376806be391d5b964c363f6f06f2f4b11095d6d5a38",
+      "src/graph/vendor/relate.d.ts": "1b230dcd8edbeacd4e6e8e24d161dde93c732bbe8a5f48a891f03fa941c03640",
+      "src/graph/vendor/snippets/relate-wasm-7487af8b11cb0efe/js/opfs.js": "493a1c8d8a761ead191addd9701a2dd15276db250cda2323ad3659c1c9c7474e"
+    }
   }
 }

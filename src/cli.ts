@@ -20,8 +20,11 @@ import {
   prepareCmd,
 } from './commands/digest.ts';
 import { sourceCmd } from './commands/source.ts';
+import { queryCmd, ROW_CAP } from './commands/query.ts';
 import { emit, exitCodeOf, UserError } from './commands/output.ts';
 import { publishCmd, renderCmd } from './commands/publish.ts';
+import { reviewImportCmd, reviewMergeCmd, reviewPacketCmd } from './commands/review.ts';
+import { reviewRunCmd } from './commands/reviewRun.ts';
 import {
   comicArtCmd,
   comicRerollCmd,
@@ -165,6 +168,21 @@ program
   .action((ref, o) => expandCmd(cwd, ref, { ...g(), ...o }));
 
 program
+  .command('query [words...]')
+  .description(
+    "ask this run's evidence graph: a named query (brief, outline, why <path|H#>, verified, unverified, unexplained, turn <S#>, stale <R#>, dead-ends, pushback, schema) or --cypher",
+  )
+  .option('--run <id>', 'run id (default: latest)')
+  .option('--cypher <query>', 'a read-only Cypher query (MATCH ... RETURN ...)')
+  .option('--params <json>', 'parameters for --cypher, as a JSON object')
+  .option('--all', `print every row (default: at most ${ROW_CAP} per section)`)
+  .option(
+    '--layout <layout>',
+    'brief only: toon, neighborhood or neighborhood-wide (default: the layout prepare chose for the run)',
+  )
+  .action((words, o) => queryCmd(cwd, words ?? [], { ...g(), ...o }));
+
+program
   .command('prepare')
   .description('prepare digest and contribution context from one repository snapshot')
   .option('--run <id>', 'refresh an existing run')
@@ -173,6 +191,38 @@ program
   .option('--exclude <ids>', 'session refs or ids to exclude', list)
   .option('--budget <tokens>', 'approximate digest token budget', Number)
   .option('--offline', 'disable GitHub lookups and external contributor research')
+  .option(
+    '--layout <layout>',
+    'evidence brief layout for this run: toon (default), neighborhood or neighborhood-wide; later commands use it',
+  )
+  .option(
+    '--graph-search <mode>',
+    'search links in the evidence graph (SKILL "Graph search:"): fulltext (default; bm25 is an alias) or none; refreshes of the run keep it',
+  )
+  .option(
+    '--review-passes <n>',
+    'review plan (SKILL "Review passes:"): fresh reviewer passes from distinct reviewer agents that publish requires (default 1)',
+  )
+  .option(
+    '--review-lenses <list>',
+    'review plan (SKILL "Review lenses:"): a, b, c or none; one reviewer pass per lens',
+  )
+  .option(
+    '--reviewer-model <name>',
+    'review plan (SKILL "Reviewer model:"): every pass must record this model; "same" or omitted for none',
+  )
+  .option(
+    '--reviewer-effort <level>',
+    'review plan (SKILL "Reviewer effort:"): low, medium, high, xhigh, max or default; every pass must record it',
+  )
+  .option(
+    '--reviewer-runner <runner>',
+    'review plan (SKILL "Reviewer runner:"): agent (the drafter starts the reviewer) or tracetoon (tracetoon review run starts it with the model pinned; publish requires that)',
+  )
+  .option(
+    '--review-recheck <mode>',
+    'review plan (SKILL "Review recheck:"): once (each reviewer confirms the correction round), contested (only reviewers whose findings were rejected) or none; publish never requires a recheck',
+  )
   .action((o) => {
     prepareCmd(cwd, { ...g(), ...o });
   });
@@ -215,10 +265,108 @@ program
   )
   .option('--no-comic', 'leave the comic out even if one was rendered')
   .option('--retitle', 'replace a title a person chose (only after the user agrees)')
+  .option(
+    '--lean',
+    'lean brief path: drafted inline from the evidence brief, no separate reviewer needed to publish',
+  )
+  .option(
+    '--check',
+    'brief path: check the draft against the evidence brief before the slim review',
+  )
+  .option(
+    '--reviewed',
+    'reviewed brief path: drafted inline from the evidence brief, then checked by one slim reviewer (reviewer-notes.md)',
+  )
   .action((o) => {
     o.noComic = o.comic === false;
     renderCmd(cwd, { ...g(), ...o });
   });
+
+program
+  .command('review-packet')
+  .description(
+    'write review-packet.md for the lean reviewer: numbered body, brief rows, hunk owners and the diff',
+  )
+  .option('--run <id>', 'run id (default: latest)')
+  .option('--lean', 'the lean packet (the only one)')
+  .option(
+    '--lens <a|b|c>',
+    'a lens reviewer packet (review-packet-<lens>.md): the lens checklist first, unused brief rows left out',
+  )
+  .action((o) => reviewPacketCmd(cwd, { ...g(), ...o }));
+
+const review = program.command('review').description('lean reviewer handoffs');
+
+review
+  .command('run')
+  .description(
+    "run the lean reviewer as a codex exec session pinned to the review plan's reviewer model, verify the model from its rollout, and import its findings",
+  )
+  .option('--run <id>', 'run id (default: latest)')
+  .option(
+    '--lens <a|b|c>',
+    'run the lens reviewer (review-packet-<lens>.md, reviewer-lens-<lens>.md)',
+  )
+  .option(
+    '--recheck',
+    'confirmation round: resume the same reviewer session with the changed body lines and its previous findings',
+  )
+  .option(
+    '--model <name>',
+    'reviewer model when the review plan names none (must equal the plan otherwise)',
+  )
+  .option(
+    '--effort <level>',
+    'reviewer effort when the review plan names none (must equal the plan otherwise)',
+  )
+  .option(
+    '--all',
+    'run every pass the review plan requires (one per lens plus the general passes) in parallel, import each, and write one merged list (review-findings-merged.md); with --recheck, recheck them',
+  )
+  .option('--fresh', 'with --all: rerun passes already imported for the current body too')
+  .option(
+    '--note <text>',
+    'with --recheck: your rejections and the diff lines behind them, passed to the reviewer',
+  )
+  .action(async (o) => reviewRunCmd(cwd, { ...g(), ...o }));
+
+review
+  .command('merge')
+  .description(
+    'merge the findings of every imported reviewer pass into one deduplicated, ordered list (review-findings-merged.md), capped at 12 lines',
+  )
+  .option('--run <id>', 'run id (default: latest)')
+  .action((o) => reviewMergeCmd(cwd, { ...g(), ...o }));
+
+review
+  .command('import')
+  .description(
+    "turn the lean reviewer's review-findings.json into review.json v2 for the current render",
+  )
+  .option('--run <id>', 'run id (default: latest)')
+  .option('--findings <path>', 'findings file (default: <run>/review-findings.json)')
+  .option('--agent-id <id>', "the reviewer's real host agent id (overrides the file)")
+  .option(
+    '--reviewer-model <name>',
+    'the model the reviewer ran on (SKILL "Reviewer model:" line); recorded as reviewer.model',
+  )
+  .option(
+    '--reviewer-effort <level>',
+    'the effort the reviewer ran at (SKILL "Reviewer effort:" line); recorded on the pass',
+  )
+  .option(
+    '--pass <n>',
+    "which reviewer pass this is (default: this reviewer's earlier pass with the same lens, else the next)",
+  )
+  .option(
+    '--lens <a|b|c>',
+    'the lens this reviewer checked (default findings file: review-findings-<lens>.json)',
+  )
+  .option(
+    '--rebind',
+    'rebuild review.json for the current render from the passes already imported (claims whose quote is gone count as fixed)',
+  )
+  .action((o) => reviewImportCmd(cwd, { ...g(), ...o }));
 
 program
   .command('publish')
@@ -228,7 +376,15 @@ program
   .option('--no-push', 'require the rendered revision to already be on the remote')
   .option('--draft', 'open the PR as a draft')
   .option('--hosting <how>', 'where the comic image goes: auto, branch or attach')
-  .action((o) => publishCmd(cwd, { ...g(), ...o }));
+  .option(
+    '--no-review',
+    'publish a checked brief-path draft without the slim review (only when the user asked for the cheapest run; recorded)',
+  )
+  .option(
+    '--accept-open',
+    'publish although the last render listed sentences to fix or brief rows to cover (recorded)',
+  )
+  .action((o) => publishCmd(cwd, { ...g(), ...o, noReview: o.review === false }));
 
 const comic = program.command('comic').description("make this PR's comic");
 comic
@@ -377,6 +533,7 @@ try {
       'prepare',
       'context',
       'expand',
+      'query',
       'source',
       'render',
       'publish',

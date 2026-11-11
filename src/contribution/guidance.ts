@@ -187,6 +187,10 @@ export function checkRole(value: unknown): asserts value is AgentRole {
     value.agentId === undefined || nonempty(value.agentId),
     'Role agentId must be a nonempty string when supplied.',
   );
+  requireThat(
+    value.model === undefined || nonempty(value.model),
+    'Role model must be a nonempty string when supplied.',
+  );
 }
 
 function checkRef(

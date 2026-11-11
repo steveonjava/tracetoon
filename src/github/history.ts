@@ -4,6 +4,7 @@
  */
 import type { PrTruth } from '../git/pr.ts';
 import { gh } from '../util/exec.ts';
+import { repoArgs } from './target.ts';
 import { decodeMeta } from './body.ts';
 import {
   CAST_KINDS,
@@ -41,6 +42,7 @@ export function recentComics(
     String(LOOK_BACK),
     '--search',
     '"tracetoon:meta" in:body',
+    ...repoArgs(truth.target?.repo),
     '--json',
     'number,body',
   ]);

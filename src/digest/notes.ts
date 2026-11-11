@@ -80,10 +80,30 @@ export function contextNotes(
  * (or must, by the repo's policy). Facts only, grouped; no prose to copy.
  */
 export function evidenceNotes(
-  digest: Pick<TraceDigest, 'sessions' | 'files' | 'pr' | 'verification' | 'validation'>,
+  digest: Pick<
+    TraceDigest,
+    'sessions' | 'files' | 'pr' | 'verification' | 'validation' | 'graph'
+  >,
+  brief?: string,
 ): string {
   const included = digest.sessions.filter((s) => s.band === 'included');
   const lines: string[] = ['# Notes to write from', ''];
+  if (digest.graph)
+    lines.push(
+      'Draft from the evidence brief below (`tracetoon query brief`): change units at the symbols that own them, the requests and commit-message sentences behind each (each scoped to its own commit), validation dated against the edits, limits, and what not to claim.',
+      '',
+    );
+  if (brief)
+    lines.push(
+      '## Evidence brief (`tracetoon query brief`)',
+      '',
+      '```',
+      brief,
+      '```',
+      '',
+      'Each row cites its evidence: diff refs for code, S#/P#/D# for requests, <sha>#n for one commit-message sentence, R#/V# for checks. `tracetoon query why <path>` drills into one file.',
+      '',
+    );
   const asks = included.flatMap((s) =>
     s.prompts.filter((p, i) => p.ledToEdits || p.pushback || i === 0),
   );
@@ -170,6 +190,25 @@ export function evidenceNotes(
     for (const c of explanations)
       lines.push(`- commit:${c.sha}: ${c.body!.slice(0, 1200)}`);
     lines.push('');
+  }
+  const traced = digest.files.filter(
+    (f) => (f.role ?? 'behavior') === 'behavior' || f.role === 'tests',
+  );
+  if (traced.some((f) => f.facts || f.checksAfterLastEdit)) {
+    lines.push('## Where each change came from (evidence graph)');
+    for (const f of traced.slice(0, 15)) {
+      const from = f.facts?.length ? f.facts.join(', ') : 'no captured prompt';
+      const checks = f.checksAfterLastEdit?.length
+        ? `checks after its last captured edit: ${f.checksAfterLastEdit.join(', ')}`
+        : 'no check captured after its last edit';
+      lines.push(`- ${f.path}: ${from}; ${checks}`);
+    }
+    if (traced.length > 15) lines.push(`- ${traced.length - 15} more files.`);
+    lines.push(
+      '',
+      'Ask `tracetoon query why <path>` for the turns, diff refs and commits behind a file, `tracetoon query unverified` for files no check followed, and `tracetoon query brief` for the whole picture.',
+      '',
+    );
   }
   const byRole = new Map<string, string[]>();
   for (const f of digest.files) {

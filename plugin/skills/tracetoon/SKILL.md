@@ -6,9 +6,14 @@ description: Create a GitHub PR with a description and optional comic written fr
 # Tracetoon: PR descriptions and comics from agent traces
 
 Tracetoon reads the session logs your agents already keep on disk, finds the
-sessions that produced the current branch, and gives you a redacted digest. You
-coordinate a researcher, a drafter and an independent reviewer; Tracetoon draws
-the comic, checks the result, and creates or updates the PR.
+sessions that produced the current branch, and gives you a redacted digest and
+an evidence brief. With a brief, you draft the description yourself from it
+(references/drafting.md) and fresh independent reviewers check it from a
+lean review packet (step 2b). Without a brief, or
+when the user asks for the most thorough PR, you coordinate a researcher, a
+drafter and an independent reviewer. An unattended run is not a request for the
+cheapest PR. Tracetoon draws the comic, checks the result, and creates
+or updates the PR.
 
 ## The tool
 
@@ -47,7 +52,8 @@ that bypass on your own initiative.
 Keep the selected JSON run ID and artifact paths in every handoff. An explicit
 run failure must not switch to another run. Start with compact evidence and
 notes; expand individual facts when needed rather than loading full traces into
-every role. Keep the researcher, drafter and independent reviewer separate.
+every role. On the full path, keep the researcher, drafter and independent
+reviewer separate.
 
 0. **Initialize PR preparation.** Reuse the run from the hook redirect, or run
    `tracetoon task begin --json` now and keep its run ID. Use actual host session
@@ -91,8 +97,16 @@ every role. Keep the researcher, drafter and independent reviewer separate.
    - When you suggest a command for the user to run themselves, use
      `command.run` from `tracetoon status --json` (the launcher's full path if
      `tracetoon` isn't on their PATH).
-2. **Prepare.** `tracetoon prepare --json` (add `--run <id>` to reuse the run
-   from step 0). It prints the run folder and the digest path. Run it as its
+2. **Prepare.** `tracetoon prepare --json --layout <layout> --review-passes <n>`,
+   with the layout and pass count from the `Brief layout:` and `Review passes:`
+   lines near the end of this file; add `--review-lenses <a,b,c>` when
+   `Review lenses:` lists lenses, `--reviewer-model <name>` when `Reviewer
+   model:` names a model (`cheap` included), `--reviewer-effort <level>` when
+   `Reviewer effort:` names a level, `--reviewer-runner <agent|tracetoon|auto>`
+   from `Reviewer runner:` (publish refuses until that review plan is met),
+   `--review-recheck <once|contested|none>` from `Review recheck:`, and
+   `--graph-search <fulltext|none>` from `Graph search:`. Add `--run
+   <id>` to reuse the run from step 0. It prints the run folder and the digest path. Run it as its
    own command, after any `git commit`, never chained in the same command: your own tool call is only logged once it
    finishes, so a digest inside it can't see that command.
    Keep the selected run ID and pass `--run <id>` to subsequent commands that
@@ -114,7 +128,123 @@ every role. Keep the researcher, drafter and independent reviewer separate.
      In the public body, name the commands and observed results. Keep receipt
      internals local; do not turn content or environment fingerprints into a
      general validation assurance. Attribute each result to its actual command.
-3. **Context.** Read the prepared `context.json`; do not repeat preparation. Note the PR template, existing PR,
+     Read every command's whole output: never pipe `prepare`, `query` or
+     `render` through `head` or `tail`. When `prepare --json` returns a
+     `brief`, take step 2b unless the user's own message asks for something
+     else: the cheapest or quickest PR (2a), or the most thorough one (steps
+     3–7 with a researcher, a drafter and a reviewer, each using the brief).
+     2a. **Quick brief path:** follow [references/quick-path.md](references/quick-path.md).
+     2b. **Reviewed brief path (the default with a brief).** You draft; fresh
+     independent reviewers check. `Reviewer model: cheap` means your host's
+     small fast model (Claude Code: `haiku`; Codex: `luna`, i.e. gpt-6-luna)
+     and `Reviewer runner: auto` means reviewer agents you start on Claude
+     Code and `tracetoon review run` on Codex. Prepare resolves both and its
+     next step names the model and the command; follow it (an unknown host
+     gets the main agent's model and reviewer agents). You need only
+     [references/drafting.md](references/drafting.md) and
+     [references/reviewer-lean.md](references/reviewer-lean.md) here; don't read
+     contribution-workflow.md on this path.
+     1. Read the brief and `context.json`; apply step 3's AI-policy bullets.
+        Find the checks the repository requires (contributing guide, CI config)
+        yourself; there is no separate researcher.
+     2. Draft inline following [references/drafting.md](references/drafting.md):
+        optionally a short `change-map.json`, then `title.txt` and `body.md`:
+        what the PR does and why first, no fixed section list, about 250–450
+        words for a typical PR. Tag factual sentences with brief refs
+        (`[CH1, commit:<sha>#2]`) and put `<!-- tracetoon:validation -->`
+        where the Validation section belongs.
+     3. Run each required check that has no current receipt once with
+        `tracetoon check --run <id> --name <check> -- <command>`.
+     4. `tracetoon render --check --json --run <id>`: fix every sentence it lists
+        and cover every listed row, up to three rounds.
+     5. `tracetoon render --json --run <id>`, then
+        `tracetoon review-packet --lean --run <id>`; it writes
+        `<run>/review-packet.md` (line-numbered body, compact brief rows,
+        hunk→symbol map, selected diff). With lenses: one
+        `review-packet --lean --lens <x> --run <id>` per lens
+        (`review-packet-<x>.md`).
+        **If the runner is tracetoon** (`Reviewer runner: tracetoon.`, or
+        `auto` on Codex: prepare's next step says `tracetoon review run`), don't start a reviewer agent and
+        skip 6–8: run `tracetoon review run --all --run <id>` once. It runs
+        every planned pass (one per lens plus the general passes beyond the
+        lens count) in parallel on the named model, imports each, and prints
+        one merged list (`<run>/review-findings-merged.md`). Apply it in ONE
+        edit pass as in 8, `render --check --json`, then recheck only per the
+        `Review recheck:` line: `once` → `tracetoon review run --all --recheck
+        --run <id>`; `contested` → the same, only if you rejected a finding
+        (add `--note "<finding>: <diff line>"`); `none` → no recheck. Then
+        `tracetoon review import --run <id> --rebind`. If a pass fails, rerun
+        the command it prints (it runs only the failed passes).
+     6. Start **one fresh reviewer**, not a fork (a fork costs the same and
+        carries your drafting reasoning). Its message is the contents of
+        `review-packet.md` followed by
+        [references/reviewer-lean.md](references/reviewer-lean.md), so it needn't
+        read files.
+        - **Claude Code:** one `Agent` call (subagent type general-purpose) with
+          that prompt; ask it to finish within about 4 turns.
+        - **Codex:** `spawn_agent` with `fork_turns: "none"` and the packet and
+          reviewer-lean.md in the message.
+        - **Lenses.** When `Review lenses:` lists lenses, start one fresh
+          reviewer per lens **in parallel** (Claude Code: several `Agent`
+          calls in one message; Codex: several `spawn_agent` calls before
+          waiting), each with its `review-packet-<x>.md` followed by
+          [references/reviewer-lens-<x>.md](references/reviewer-lens-a.md)
+          instead of reviewer-lean.md; it writes `review-findings-<x>.json`.
+          If `Review passes:` is larger than the number of lenses, also start
+          that many more general reviewers in the same message (the plain
+          `review-packet.md` with reviewer-lean.md, imported without `--lens`).
+          With `Review passes:` above 1 and no lenses, start all the general
+          reviewers in one message too.
+        - **Reviewer model and effort (required when named), on EVERY
+          reviewer call**: each lens reviewer, each general reviewer started
+          alongside lenses, and each later fresh pass. Read the `Reviewer
+          model:` and `Reviewer effort:` lines at the end of this Workflow
+          section and pass both together in the same call. Claude Code:
+          `Agent` with `model: "<name>"` and `effort: "<level>"` (low, medium,
+          high, xhigh, max); Codex: `spawn_agent` with `model: "<name>"` and
+          its reasoning-effort argument (if your spawn tool has one). Pass the
+          exact name, e.g. `Reviewer model: haiku.` → `model: "haiku"`, and for
+          `cheap` the name prepare resolved (its next step says `on model
+          <name>`); never drop or swap it, even when it differs from your own model. Only
+          `same as the main agent` means no model, and only `default` means no
+          effort.
+
+        The reviewer writes `<run>/review-findings.json`:
+        `{"v":1,"reviewer":{"agentId":"<real id>"},"findings":[{"kind":"claim"|"omission","quote":"…","verdict":"contradicted"|"overstated"|"unsupported"|"missing","evidence":"diff:N | brief ref | path:line","fix":"…"}]}`.
+     7. `tracetoon review import --run <id> --agent-id <its real id>` turns the
+        findings into `review.json` v2 (drafter inline, reviewer delegated).
+        Never invent an agent id. When the `Reviewer model:` line names a model,
+        add `--reviewer-model <name>` (recorded as `reviewer.model`); render's
+        review line then shows `Reviewer model: <name>`, or `not recorded`.
+        Likewise `--reviewer-effort <level>`, and `--lens <x>` for a lens
+        reviewer. Each import records a pass in `review.json` `passes`;
+        render lists, and publish refuses, until the plan's passes (distinct
+        reviewer ids, one per lens, the named model and effort) are imported.
+     8. One correction round. With several reviewers, first
+        `tracetoon review merge --run <id>`: one deduplicated list
+        (`review-findings-merged.md`), applied in ONE edit pass. Reviewers
+        misread code too, so for each finding first read the diff lines or
+        brief row it cites yourself, then:
+        - a claim flagged contradicted, overstated or unsupported is either
+          fixed (narrowed, attributed or removed) or rejected with the diff
+          line or row that supports the original; never silently left as is;
+        - write the fix from the patch, not from the reviewer's `fix` text:
+          never paste its wording unchecked (a pasted fix that misreads the
+          code is a new error);
+        - add an omission only when the cited row or diff lines show it.
+        Then `render --check --json` (it notes flagged quotes still verbatim
+        in the body). Recheck per the `Review recheck:` line: `once` → send
+        the **same** reviewer(s) the changed lines, previous findings and your
+        rejections (with their diff lines) to confirm or re-flag (Claude Code:
+        SendMessage; Codex: `followup_task`), all in one message, and
+        re-import each (with its `--lens`); `contested` → only the reviewers
+        whose findings you rejected; `none` → no recheck. Then `tracetoon
+        review import --run <id> --rebind` so `review.json` matches the new
+        render. Publish never requires a recheck.
+     9. Comic if wanted (step 5), then publish (step 7) once render reports the
+        review current.
+3. **Context.**
+   Read the prepared `context.json`; do not repeat preparation. Note the PR template, existing PR,
    settings, AI policy, and `comic.recentComics` (compact creative choices from
    recent comics, so this one can differ; missing legacy fields are unknown).
    - **Researcher phase.** Launch a separate researcher with the host's native
@@ -125,8 +255,19 @@ every role. Keep the researcher, drafter and independent reviewer separate.
      drafting. Use its source-backed AI policy and disclosure controls alongside
      the original context. Collection gaps remain visible and advisory.
    - Keep the host as coordinator. Use distinct researcher, drafter and reviewer
-     agents; record their actual host ids. Start fresh contexts where supported, pass the
-     focused paths in `role-packets.json`, and retain the same drafter for corrections.
+     agents; record their actual host ids. Pass the focused paths in
+     `role-packets.json`, and retain the same drafter for corrections.
+     - **Codex:** start each role with `spawn_agent` and its default fork; don't
+       pass `fork_turns` (a fresh role re-reads everything and costs more). Wait
+       with long timeouts (about 120 s) rather than polling.
+     - **Claude Code:** start each role with its own `Agent` call (subagent type
+       general-purpose) and record the id it returns as `{ "mode": "delegated",
+       "agentId": "<id>" }`: the researcher in `guidance.json`, the drafter and
+       reviewer in `review.json`. The reviewer writes `review.json` (v2) after
+       `render --json` on the current head.
+     - Don't re-read `evidence-notes.md` yourself after `prepare`: it printed the
+       brief. The researcher works from the changed-file list and guidance, not
+       the whole patch.
      Do not copy the entire coordinator transcript into every role. If native delegation is unavailable,
      run the phases sequentially with `mode: "inline"` and clearly disclose the
      inline draft / self-review. Never invent an agent id or claim independence.
@@ -152,7 +293,16 @@ every role. Keep the researcher, drafter and independent reviewer separate.
    [contribution-workflow.md](references/contribution-workflow.md). It reads the
    trace evidence (using `tracetoon expand <refs...>` for batched detail) and writes `body.md`
    in the run folder following
-   [references/writing-guide.md](references/writing-guide.md). For a new PR,
+   [references/writing-guide.md](references/writing-guide.md). Whoever drafts,
+   a delegated drafter or you inline, drafts from the evidence brief
+   (`tracetoon query brief --run <id>`; `prepare` prints it and it heads
+   `evidence-notes.md`). It lists the change units at the symbols that own them,
+   the requests and commit-message sentences behind each (each scoped to its own
+   commit), per-change behavior lines, process facts, checks dated against the
+   edits and limits; the rules on what not to claim are in
+   [references/drafting.md](references/drafting.md). Read
+   the diff refs it cites before describing a hunk; `query why <path>` drills
+   into one file. For a new PR,
    also write a one-line `title.txt`, preserving an explicit user-supplied title,
    otherwise following the guide's "The title" section
    and `titleRules` from context. For an existing PR, keep its title unless the
@@ -249,13 +399,24 @@ every role. Keep the researcher, drafter and independent reviewer separate.
    independently checks source interpretation and
    the full rendered PR, then writes `review.json` using
    [contribution-workflow.md](references/contribution-workflow.md).
-   The reviewer also checks the description's accuracy (`review.json.bodyReview`).
+   The reviewer also checks the description's accuracy (`review.json.bodyReview`),
+   using `review-input.json` `graphLeads` (files no passing check followed, hunks
+   no captured edit explains) and `tracetoon query` to test attribution and freshness.
+   A lead is not a finding: before telling the drafter a check was not run,
+   expand the session's raw commands, since one shell command often chains
+   several checks.
    First, it reads only the title and body and records what it thinks changed.
    Then it checks each independent factual clause against the diff and source snapshots, including fallbacks and the owning symbols of review pointers, looking for counter-evidence,
    and lists behavior the body leaves out. Re-render to
    validate and display the assessment. Return draftable findings, including
    claims that aren't `supported` and omissions, to the drafter
-   for up to **two correction rounds**, each followed by a render and fresh review.
+   for up to **two correction rounds** (one when the run has a brief), each followed by a render and fresh review.
+   With a brief, the follow-up after the correction round goes to the **same
+   reviewer**, not a new one: after the drafter's fix, `render --json`, then
+   send that reviewer the new `review-input.json` (Codex: `followup_task`;
+   Claude Code: continue the same agent with SendMessage) to confirm or re-flag
+   only what changed and update `review.json` to the new fingerprint. Publish
+   only when render reports the review current.
    Findings show in `render` output and `--json`; mention remaining ones briefly
    after publishing. Never manufacture human attestations or test evidence.
    Guidance and review findings are advisory.
@@ -290,7 +451,29 @@ every role. Keep the researcher, drafter and independent reviewer separate.
      monitoring CI, editing the PR or merging when requested, under native host
      rules. Creating the PR does not require ending the turn.
 
+Reviewer model: cheap.
+
+Reviewer effort: xhigh.
+
+Review passes: 2.
+
+Review lenses: d.
+
+Reviewer runner: auto.
+
+Review recheck: none.
+
+Brief layout: toon.
+
+Graph search: fulltext.
+
 ### Other commands
+
+- `tracetoon query [name] --run <id>`: ask the run's evidence graph. Named
+  queries: `brief` (start here), `outline`, `why <path|path:line|H#|diff:N>`, `verified [path]`,
+  `unverified`, `unexplained`, `turn <S#>`, `stale <R#>`, `dead-ends`,
+  `pushback`, `schema`; or `--cypher "MATCH … RETURN …"` (read-only). Output is
+  compact TOON; add `--json` for JSON and `--all` past the row cap.
 
 - `tracetoon export --agent-trace`: line-level attribution as an Agent Trace
   record, if the user asks for one.

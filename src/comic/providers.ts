@@ -235,7 +235,7 @@ export function onPath(name: string): string | undefined {
 /** An agent CLI's path: the override ("none" turns the route off), else PATH. */
 const cliBin = (override: string | undefined, name: string) =>
   override === 'none' ? undefined : override || onPath(name);
-const codexBin = () => cliBin(process.env.TRACETOON_CODEX_BIN, 'codex');
+export const codexBin = () => cliBin(process.env.TRACETOON_CODEX_BIN, 'codex');
 const agyBin = () => cliBin(process.env.TRACETOON_AGY_BIN, 'agy');
 const geminiKey = () => process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 const openaiKey = () => process.env.OPENAI_API_KEY;
@@ -246,7 +246,7 @@ export const GEMINI_MODEL = () =>
   process.env.TRACETOON_GEMINI_MODEL || 'gemini-nano-banana-2.1';
 
 /** Where Codex keeps its login and settings. */
-const codexHome = () => process.env.CODEX_HOME || join(homedir(), '.codex');
+export const codexHome = () => process.env.CODEX_HOME || join(homedir(), '.codex');
 
 /**
  * A model provider other than OpenAI set in Codex's config.toml (top level, or
@@ -512,7 +512,7 @@ async function openai(job: ImageJob): Promise<Uint8Array> {
 
 const IMAGE_EXT = /\.(png|jpe?g|webp)$/i;
 
-function run(
+export function runCli(
   bin: string,
   args: string[],
   cwd: string,
@@ -646,7 +646,7 @@ async function codexBatch(jobs: ImageJob[]): Promise<Uint8Array[]> {
   const args = ['exec', '--skip-git-repo-check', '--sandbox', 'read-only', '--json'];
   for (const r of refs) args.push('--image', r.path);
   args.push('-'); // read the prompt from stdin
-  const res = await run(bin, args, work, 20 * 60_000, prompt);
+  const res = await runCli(bin, args, work, 20 * 60_000, prompt);
   const events = res.stdout.split('\n').flatMap((l) => {
     try {
       return [JSON.parse(l) as Record<string, unknown>];
@@ -689,7 +689,7 @@ async function antigravityBatch(jobs: ImageJob[]): Promise<Uint8Array[]> {
   // agy needs permission to use its tools without a person at the keyboard;
   // it runs in an empty scratch folder with only the reference images.
   writeFileSync(join(work, 'prompt.md'), prompt, 'utf8');
-  const res = await run(
+  const res = await runCli(
     bin,
     [
       '-p',

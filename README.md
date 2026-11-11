@@ -205,15 +205,50 @@ stalled check. Interrupted checks do not establish a passing result.
    with how that run relates to later edits. Everything is redacted: secrets,
    personal data, your home path and username. Sessions that may not belong to
    the PR are left out and counted in the message after the PR.
+   It also builds the run's **evidence graph** (`evidence-graph.json`): each
+   prompt linked to the edits made in its turn, each edit to the diff hunks its
+   lines survive in, each run to the files edited after it, each commit to the
+   session that made it. Tracetoon uses it to say which request and which
+   checks are behind every changed file, to name the files a cited test run
+   didn't see, and to trim the digest by relevance instead of recency. Your
+   agent asks it questions with `tracetoon query` (`outline`, `why <path>`,
+   `unverified`, …) instead of reading every fact and the whole patch. The
+   graph runs in-process on [Relate](https://github.com/relatedb/relate)
+   compiled to WebAssembly: no native modules, no database file, and the
+   digest is still written if it can't start. (Relate is the open-source
+   successor of cypherlite, which earlier releases embedded;
+   `TRACETOON_CYPHERLITE_WASM` still works as a deprecated alias of
+   `TRACETOON_RELATE_WASM`.)
 3. **`tracetoon context`** reads the PR template, AI policies and agent
    instructions, any existing PR (and edits made to it on GitHub), your
    settings, and the art styles of the repo's recent comics. It also prepares
    a contributor-research packet and the submitted diff.
-4. **Your agent coordinates a researcher and a drafter.** The researcher collects
-   applicable local and linked guidelines, scoped instructions, conditions and
-   exceptions. `tracetoon guidance check` validates that handoff. A separate
-   drafter receives the guidance, redacted traces and submitted code, then writes
-   the description (`body.md`) and comic brief (`comic.json`).
+4. **Your agent drafts from the evidence brief; cheap reviewers check it.**
+   By default (`tracetoon prepare`) the graph also gets search links: a
+   FULLTEXT (BM25) index in Relate over each changed hunk's path, symbols and
+   lines ties commit sentences, requests and plans to the hunks they describe,
+   but only when an exact name or path mention agrees or one file clearly
+   leads. Your agent writes the description (`body.md`) itself from the
+   compact evidence brief (`tracetoon query brief`) and the patch. Two fresh
+   reviewers then check it in parallel, one with the completeness lens (d)
+   and one general, both on the host's cheap model at `xhigh` effort:
+   `haiku` subagents your agent starts on Claude Code, or `luna`
+   (gpt-6-luna) passes that `tracetoon review run` starts and checks
+   against the session rollout on Codex. Your agent applies the merged
+   findings in one edit pass with no recheck, and publish refuses until both
+   passes are imported. These defaults are the variant lines at the end of
+   the skill's Workflow section in `SKILL.md` (`Reviewer model: cheap.`,
+   `Reviewer effort: xhigh.`, `Review passes: 2.`, `Review lenses: d.`,
+   `Reviewer runner: auto.`, `Review recheck: none.`, `Brief layout: toon.`,
+   `Graph search: fulltext.`). Name a model or runner there to override
+   `cheap` or `auto`. On an unknown host, reviewers use the main agent's
+   model and are started by the agent. When you ask for the most thorough
+   PR, or there is no brief, your agent instead coordinates a researcher and
+   a drafter: the researcher collects applicable local and linked
+   guidelines, scoped instructions, conditions and exceptions
+   (`tracetoon guidance check` validates that handoff), and a separate
+   drafter receives the guidance, redacted traces and submitted code. Either
+   way the drafter also writes the comic brief (`comic.json`).
 5. **`tracetoon comic art` / `comic render`** draw the page with the image
    route you approved (subject to the `comic` setting), add a small "made with
    Tracetoon" footer bar, and print the words to proofread.

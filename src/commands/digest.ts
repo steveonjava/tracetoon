@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { writeFileSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { writeResearchPacket } from '../contribution/guidance.ts';
 import { loadConfig } from '../config.ts';
@@ -25,6 +25,37 @@ import { evidenceNotes } from '../digest/notes.ts';
 import { repository, workFingerprint } from '../workflow/state.ts';
 import type { Run } from '../run.ts';
 import { count } from '../util/profile.ts';
+import {
+  graphEnricher,
+  graphBrief,
+  saveGraph,
+  type GraphOutcome,
+} from '../graph/evidence.ts';
+import { LAYOUT_FILE, parseLayout, runLayout, saveRunLayout } from '../graph/layout.ts';
+import {
+  SEARCH_FILE,
+  DEFAULT_GRAPH_SEARCH,
+  parseGraphSearch,
+  saveRunGraphSearch,
+  storedGraphSearch,
+} from '../graph/search.ts';
+import {
+  skillSettings,
+  withSkillDefaults,
+  type SkillSettings,
+} from '../contribution/skillSettings.ts';
+import {
+  loadReviewPlan,
+  planEnforced,
+  planFromOptions,
+  planSummary,
+  recheckStep,
+  requiredPasses,
+  saveReviewPlan,
+  PLAN_FILE,
+  type PlanOptions,
+  type ReviewPlan,
+} from '../contribution/reviewPlan.ts';
 
 export interface ScanOpts extends OutOpts {
   base?: string;
@@ -65,7 +96,14 @@ export interface DigestOpts extends ScanOpts {
   include?: string[];
   exclude?: string[];
   budget?: number;
+  /** Brief layout for this run (`prepare --layout`); kept for later commands. */
+  layout?: string;
+  /** Search links in the graph (`prepare --graph-search`, SKILL `Graph search:`); kept for refreshes. */
+  graphSearch?: string;
 }
+
+const originRepo = (truth: { remote?: { owner: string; name: string } }) =>
+  truth.remote ? `${truth.remote.owner}/${truth.remote.name}` : undefined;
 
 export function digestHash(d: TraceDigest): string {
   const { generatedAt: _ignored, ...stable } = d;
@@ -79,8 +117,19 @@ export function digestCmd(
   display = true,
 ) {
   const { truth, matches } = shared ?? scan(cwd, { base: opts.base, noGh: opts.offline });
+  let layout;
+  let search;
+  try {
+    layout = parseLayout(opts.layout);
+    search = parseGraphSearch(opts.graphSearch);
+  } catch (e) {
+    throw new UserError((e as Error).message);
+  }
   const run = opts.run ? findRun(truth.gitDir, opts.run) : newRun(truth.gitDir);
   assertRunOwner(run, truth.toplevel, truth.head);
+  if (layout) saveRunLayout(run, layout);
+  if (search) saveRunGraphSearch(run, search);
+  search ??= storedGraphSearch(run) ?? 'none';
   const config = loadConfig(truth.toplevel);
   const selected = readJson<{ include?: string[]; exclude?: string[] }>(
     run,
@@ -92,10 +141,20 @@ export function digestCmd(
   };
   // Both digests describe the same truth; read its provenance once.
   const interop = detectInterop(truth);
+  const graph: GraphOutcome = {};
+  // Check receipts first, so the evidence graph sees which checks are fresh.
+  let checksReport: ReturnType<typeof checkReport> | undefined;
+  let verification: ReturnType<typeof receiptEvidence> | undefined;
+  // Receipts count whether or not the run was started with `task begin`.
+  if (readTask(run) || receipts(run).length) {
+    checksReport = checkReport(truth.toplevel, run);
+    verification = receiptEvidence(truth.toplevel, run, checksReport);
+  }
   const { digest, full, extractionMs, projectionMs } = buildDigestPair(truth, matches, {
     ...build,
     interop,
     budgetTokens: opts.budget ?? config.budgetTokens,
+    enrich: graphEnricher(truth, graph, verification, search),
   });
   try {
     recordTiming(run, 'digest-extraction', extractionMs);
@@ -103,8 +162,8 @@ export function digestCmd(
   } catch {
     // Optional telemetry must not prevent creation of the evidence packet.
   }
-  if (readTask(run)) {
-    const report = checkReport(truth.toplevel, run);
+  if (checksReport && verification) {
+    const report = checksReport;
     const validation = report.map((c) => ({
       name: c.name,
       command: c.command.join(' '),
@@ -113,7 +172,6 @@ export function digestCmd(
       reason: c.reason,
       durationMs: c.durationMs,
     }));
-    const verification = receiptEvidence(truth.toplevel, run, report);
     digest.verification = full.verification = verification;
     digest.checksSha = full.checksSha = receipts(run).length
       ? fileHash(run, 'checks.json')
@@ -165,7 +223,11 @@ export function digestCmd(
   writeJson(run, 'session-selection.json', build);
   const path = writeJson(run, 'digest.json', digest);
   writeJson(run, 'digest-full.json', full);
-  writeFileSync(join(run.dir, 'evidence-notes.md'), evidenceNotes(full), 'utf8');
+  saveGraph(run, graph);
+  const brief = graph.graph
+    ? graphBrief(graph.graph, { layout: runLayout(run) })
+    : undefined;
+  writeFileSync(join(run.dir, 'evidence-notes.md'), evidenceNotes(full, brief), 'utf8');
   const captured = submissionSnapshot(truth);
   writeJson(run, 'submission.json', captured);
   const ambiguous = digest.sessions.filter((s) => s.band === 'ambiguous');
@@ -205,7 +267,7 @@ export function digestCmd(
           .filter(Boolean)
           .join('\n'),
     );
-  return { truth, run, digest, full, captured };
+  return { truth, run, digest, full, captured, graph: graph.graph, brief };
 }
 
 export function expandCmd(
@@ -255,14 +317,15 @@ export function contextCmd(
   const policy = detectAiPolicy(truth.toplevel);
   const titleRules = readTitleRules(truth.toplevel, {
     offline: opts.offline,
-    repo: truth.remote ? `${truth.remote.owner}/${truth.remote.name}` : undefined,
+    repo: truth.target?.repo ?? originRepo(truth),
   });
   const config = loadConfig(truth.toplevel);
   // Compact creative choices help this comic differ. Skipped when comics are off.
   const recent =
     config.comic !== 'off' ? recentComics(truth, { offline: opts.offline }) : [];
   const ctx = {
-    repo: truth.remote ? `${truth.remote.owner}/${truth.remote.name}` : null,
+    repo: truth.target?.repo ?? originRepo(truth) ?? null,
+    target: truth.target ?? null,
     head: truth.head,
     base: truth.base,
     template: template ?? null,
@@ -339,12 +402,75 @@ export function contextCmd(
 }
 
 /** One immutable preparation snapshot shared by digest and contributor research. */
-export function prepareCmd(cwd: string, opts: DigestOpts) {
+/**
+ * The first drafting step, printed where every drafter looks: agents that
+ * write the description themselves often go from `prepare` straight to the
+ * body, past the skill's drafter instructions.
+ */
+export function graphNext(run: string, plan?: ReviewPlan): string {
+  const enforced = planEnforced(plan);
+  const settings = enforced
+    ? `${plan.reviewerModel ? ` on model ${plan.reviewerModel}` : ''}${plan.reviewerEffort ? ` at effort ${plan.reviewerEffort}` : ''}`
+    : '';
+  const flags = enforced
+    ? `${plan.reviewerModel ? ` --reviewer-model ${plan.reviewerModel}` : ''}${plan.reviewerEffort ? ` --reviewer-effort ${plan.reviewerEffort}` : ''}`
+    : '';
+  const tracetoonReview = enforced && plan.runner === 'tracetoon' && !!plan.reviewerModel;
+  const n = enforced ? requiredPasses(plan) : 1;
+  const onePass = `apply it in ONE edit pass of body.md (check each finding against the lines it cites; fix or reject every flagged claim), \`tracetoon render --check --json --run ${run}\`, then ${recheckStep(run, plan)}`;
+  const review = tracetoonReview
+    ? `\`tracetoon review run --all --run ${run}\` (Tracetoon runs ${n === 1 ? 'the reviewer' : `all ${n} reviewer passes${plan.lenses.length ? ` (lenses ${plan.lenses.join(', ')}${n > plan.lenses.length ? ' plus general' : ''})` : ''} in parallel`} on ${plan.reviewerModel}, imports each and writes one merged list, review-findings-merged.md; don't start a reviewer agent); ${onePass}`
+    : !enforced
+      ? `\`tracetoon review-packet --lean --run ${run}\`; one fresh independent reviewer (not a fork) gets review-packet.md plus references/reviewer-lean.md and writes review-findings.json; \`tracetoon review import --run ${run} --agent-id <its id>\`; one correction round, then ${recheckStep(run, plan)}`
+      : plan.lenses.length
+        ? `for each lens ${plan.lenses.join(', ')}: \`tracetoon review-packet --lean --lens <lens> --run ${run}\`; start one fresh reviewer per lens${requiredPasses(plan) > plan.lenses.length ? ` and ${requiredPasses(plan) - plan.lenses.length} general reviewer(s) (review-packet.md)` : ''} IN PARALLEL (all in one message)${settings} (packet plus references/reviewer-lens-<lens>.md); import each with \`tracetoon review import --run ${run} --lens <lens> --agent-id <its id>${flags}\`; then \`tracetoon review merge --run ${run}\` and ${onePass}`
+        : `\`tracetoon review-packet --lean --run ${run}\`; ${requiredPasses(plan)} fresh reviewer pass(es), each a NEW reviewer${settings} (packet plus references/reviewer-lean.md)${requiredPasses(plan) > 1 ? ', all started in one message' : ''}; import each with \`tracetoon review import --run ${run} --agent-id <its id>${flags}\`; then \`tracetoon review merge --run ${run}\` and ${onePass}`;
+  return `take the reviewed brief path (SKILL step 2b): draft title.txt and body.md yourself from the evidence brief (\`tracetoon query brief --run ${run}\`) and the patch, following references/drafting.md (what the PR does and why first; no fixed section list; 250–400 words; state every open \`limits\` row; point reviewers to the \`entry\` row's function and file, with only the behaviors that row ties to it); run the repository's required checks once with tracetoon check; \`tracetoon render --check --json --run ${run}\` until nothing is listed; then \`tracetoon render --json --run ${run}\` and ${review}; publish when the review is current${enforced ? ` (publish refuses until the review plan is met: ${planSummary(plan)})` : ''}. Read every command's whole output (no head or tail). Only on the user's request: the quick path (SKILL step 2a) or the three-role thorough path.`;
+}
+
+export function prepareCmd(cwd: string, given: DigestOpts & PlanOptions) {
   const repo = repository(cwd);
   const before = workFingerprint(repo.root);
-  const shared = scan(cwd, { base: opts.base, noGh: opts.offline });
+  const shared = scan(cwd, { base: given.base, noGh: given.offline });
+  // Unset options default to the skill's own variant lines, so a configured
+  // reviewer plan or brief layout holds even when the agent doesn't pass it.
+  // A run that already stored a layout or plan keeps it.
+  const skill = skillSettings();
+  const existing = (() => {
+    if (!given.run) return undefined;
+    try {
+      return findRun(shared.truth.gitDir, given.run);
+    } catch {
+      return undefined;
+    }
+  })();
+  if (existing && existsSync(join(existing.dir, LAYOUT_FILE))) delete skill.layout;
+  if (existing && existsSync(join(existing.dir, SEARCH_FILE))) delete skill.graphSearch;
+  if (existing && existsSync(join(existing.dir, PLAN_FILE))) {
+    delete skill.reviewerModel;
+    delete skill.reviewerEffort;
+    delete skill.reviewPasses;
+    delete skill.reviewLenses;
+    delete skill.reviewerRunner;
+    delete skill.reviewRecheck;
+  }
+  const opts = withSkillDefaults(
+    given as DigestOpts & PlanOptions & SkillSettings,
+    skill,
+  );
+  // Without a flag, a SKILL line or a stored mode, prepare searches.
+  if (!opts.graphSearch && !(existing && existsSync(join(existing.dir, SEARCH_FILE))))
+    opts.graphSearch = DEFAULT_GRAPH_SEARCH;
+  let plan: ReviewPlan | undefined;
+  try {
+    plan = planFromOptions(opts);
+  } catch (e) {
+    throw new UserError((e as Error).message);
+  }
   const prepared = digestCmd(cwd, opts, shared, false);
   const context = contextCmd(cwd, { ...opts, run: prepared.run.id }, prepared, false);
+  if (plan) saveReviewPlan(prepared.run, plan);
+  else plan = loadReviewPlan(prepared.run);
   if (workFingerprint(repo.root) !== before)
     throw new UserError(
       'Repository changed during preparation. Retained outputs are stale; prepare again after finalizing the changes.',
@@ -379,14 +505,26 @@ export function prepareCmd(cwd: string, opts: DigestOpts) {
       'evidence-notes.md',
       'change-map.json',
     ],
+    graph: prepared.graph
+      ? {
+          path: 'evidence-graph.json',
+          stats: prepared.graph.stats,
+          drafter: ['brief', 'why <path>', 'turn <S#>', 'unverified'],
+          reviewer: ['unverified', 'unexplained', 'why <path|H#>', 'stale <R#>'],
+        }
+      : null,
     instructions:
-      'Use fresh role contexts where supported. Read the cold-read packet before the reviewer evidence. Expand referenced evidence in batches; missing evidence remains unknown.',
+      'Use fresh role contexts where supported. Read the cold-read packet before the reviewer evidence. Expand referenced evidence in batches; missing evidence remains unknown. Drafter and reviewer: ask the evidence graph with `tracetoon query <name> --run <id>` (start with `brief`) before reading the whole patch; its diff refs are citable as change-map behaviorChecks evidence.',
   };
   writeJson(prepared.run, 'role-packets.json', roles);
   emit(
     opts,
     {
       run: prepared.run.id,
+      ...(prepared.graph ? { next: graphNext(prepared.run.id, plan) } : {}),
+      // One JSON line, so piping through `head` still shows the whole map.
+      ...(prepared.brief ? { brief: prepared.brief } : {}),
+      ...(planEnforced(plan) ? { reviewPlan: plan } : {}),
       runDir: prepared.run.dir,
       rolePackets: join(prepared.run.dir, 'role-packets.json'),
       digestPath: join(prepared.run.dir, 'digest.json'),
@@ -394,7 +532,13 @@ export function prepareCmd(cwd: string, opts: DigestOpts) {
       ...context.context.contribution,
     },
     () =>
-      `Run ${prepared.run.id}: digest, context and role-packets.json prepared from one snapshot.`,
+      [
+        `Run ${prepared.run.id}: digest, context and role-packets.json prepared from one snapshot.`,
+        prepared.graph ? `Next: ${graphNext(prepared.run.id, plan)}` : '',
+        prepared.brief ? `Evidence brief:\n${prepared.brief}` : '',
+      ]
+        .filter(Boolean)
+        .join('\n'),
   );
   return prepared;
 }

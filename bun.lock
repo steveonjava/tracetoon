@@ -5,12 +5,12 @@
     "": {
       "name": "tracetoon",
       "dependencies": {
-        "@expo-google-fonts/comic-neue": "^0.4.1",
         "@resvg/resvg-wasm": "2.6.2",
         "commander": "^14.0.0",
         "marked": "^16.0.0",
       },
       "devDependencies": {
+        "@expo-google-fonts/comic-neue": "^0.4.1",
         "@types/node": "^22.0.0",
         "bun-types": "^1.1.0",
         "prettier": "^3.3.0",

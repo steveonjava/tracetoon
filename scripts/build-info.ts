@@ -3,10 +3,12 @@ import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { prepareDependencies } from './dependencies.ts';
+import { verifyRelate } from './relate.ts';
 
 const root = resolve(import.meta.dir, '..');
 export function buildManifest(check = false, stamp = true) {
   const dependencies = [prepareDependencies()];
+  verifyRelate(); // the vendored graph engine must match its pin
   const recipe = JSON.parse(readFileSync(join(root, 'build.config.json'), 'utf8'));
   if (recipe.schema !== 'tracetoon.build-recipe/v1' || recipe.bunVersion !== Bun.version)
     throw new Error(`Builds require Bun ${recipe.bunVersion}; found ${Bun.version}.`);

@@ -1030,7 +1030,7 @@ describe('CLI contribution handoffs', () => {
       encoding: 'utf8',
     }).stdout;
     expect(text).toContain(
-      'Contribution review (advisory): current (independent host agents); guidance current; 0 finding(s).',
+      'Contribution review (advisory): current (independent host agents); guidance current; 0 finding(s); Reviewer model: not recorded.',
     );
     expect(text).toContain('Next: tracetoon publish --run');
     // Rendering again with nothing changed keeps the same render identity.

@@ -1,7 +1,9 @@
 /** The evidence record: decisions as recorded, runs with honest outcomes, file roles. */
+import { shellJoin } from '../src/workflow/checks.ts';
 import { describe, expect, test } from 'bun:test';
 import {
   commandRun,
+  commandRuns,
   fileRole,
   runOutcome,
   verificationSegment,
@@ -46,6 +48,25 @@ describe('decisions', () => {
 });
 
 describe('verification runs', () => {
+  test('a typecheck error fails the typecheck, and the checks after it in an && chain never ran', () => {
+    const runs = commandRuns(
+      'bun x prettier --write a.ts >/dev/null && bun x tsc --noEmit && bun test tests/a.test.ts 2>&1 | tail -3',
+      true,
+      'Exit code 2\ntests/a.test.ts(18,40): error TS2769: No overload matches this call.',
+    );
+    expect(runs.map((r) => [r.kind, r.outcome])).toEqual([['typecheck', 'failed']]);
+    // After `;` the next check still runs.
+    const after = commandRuns(
+      'bun x tsc --noEmit; bun test 2>&1',
+      false,
+      'src/a.ts(1,1): error TS2304: Cannot find name.\n 3 pass\n 0 fail',
+    );
+    expect(after.map((r) => [r.kind, r.outcome])).toEqual([
+      ['typecheck', 'failed'],
+      ['test', 'passed'],
+    ]);
+  });
+
   test('recognizes checks inside chains, and their kind', () => {
     expect(
       verificationSegment('cd x && bun test tests/a.test.ts 2>&1 | tail -3')?.kind,
@@ -75,19 +96,116 @@ describe('verification runs', () => {
     });
   });
 
-  test('two test commands sharing one output: both listed, outcome unknown', () => {
+  test('two test commands sharing one output: both listed; a failure line fails the pair, with no counts', () => {
     const r = commandRun(
       'git stash -q; bun test tests/a.test.ts -t x 2>&1 | grep fail; git stash pop -q && bun test > out.log 2>&1; grep pass out.log',
       false,
       ' 0 pass\n 1 fail\n 147 pass\n 0 fail',
     );
-    expect(r).toMatchObject({ kind: 'test', outcome: 'unknown', basis: 'none' });
+    // One of them failed: the pair did not pass, though no count is pinned on either.
+    expect(r).toMatchObject({ kind: 'test', outcome: 'failed', basis: 'output' });
     expect(r!.cmd).toContain('bun test tests/a.test.ts');
     expect(r!.cmd).toContain(' ; bun test');
+    expect(r!.summary).toEqual([]);
     expect(commandRun('bun test', false, '96 pass\n0 fail')).toMatchObject({
       cmd: 'bun test',
       outcome: 'passed',
     });
+  });
+
+  test('test commands whose files are each read back share one output: no counts for either', () => {
+    const runs = commandRuns(
+      'bun run bundle | tail -1 && bun test > /tmp/a.log 2>&1; grep -E " pass$| fail$" /tmp/a.log; CLI=x bun test tests/flow.test.ts > /tmp/b.log 2>&1; grep -E " pass$| fail$" /tmp/b.log',
+      false,
+      ' 0 fail\n 47 pass\n 0 fail',
+    );
+    const test = runs.find((r) => r.kind === 'test')!;
+    // Both reported zero failures, so they passed; which counts are whose is unknown.
+    expect(test).toMatchObject({ outcome: 'passed', summary: [] });
+    expect(test.cmd).toContain('bun test tests/flow.test.ts');
+    expect(runs.filter((r) => r.kind === 'test')).toHaveLength(1);
+    const short = commandRuns(
+      'bun test > /tmp/a.log 2>&1; grep -E " pass$| fail$" /tmp/a.log; CLI=x bun test tests/flow.test.ts > /tmp/b.log 2>&1; grep -E " pass$| fail$" /tmp/b.log',
+      false,
+      ' 47 pass\n 0 fail',
+    );
+    expect(short.find((r) => r.kind === 'test')).toMatchObject({
+      outcome: 'unknown',
+      summary: [],
+    });
+    const failing = commandRuns(
+      'bun test > /tmp/a.log 2>&1; grep -E " pass$| fail$" /tmp/a.log; bun test tests/flow.test.ts 2>&1 | tail -2',
+      false,
+      ' 76 pass\n 0 fail\n 7 pass\n 5 fail',
+    );
+    expect(failing.find((r) => r.kind === 'test')).toMatchObject({
+      outcome: 'failed',
+      summary: [],
+    });
+  });
+
+  test('a quoted env assignment before a test command is skipped', () => {
+    const runs = commandRuns(
+      'bun test > /tmp/tt.log 2>&1; grep -E " pass$| fail$" /tmp/tt.log; CLI="$(pwd -W)/dist/x.mjs" bun test tests/comic.test.ts 2>&1 | grep -E " pass$| fail$"',
+      false,
+      ' 76 pass\n 0 fail\n 20 pass\n 0 fail',
+    );
+    const tests = runs.filter((r) => r.kind === 'test');
+    expect(tests).toHaveLength(1);
+    expect(tests[0]!.cmd).toContain('bun test tests/comic.test.ts');
+    expect(tests[0]).toMatchObject({ outcome: 'passed', summary: [] });
+  });
+
+  test("a test whose output goes to a file nobody reads doesn't take another run's results", () => {
+    const runs = commandRuns(
+      'bun test > /tmp/full.log 2>&1; CLI=dist bun test tests/flow.test.ts 2>&1 | tail -3',
+      false,
+      ' 20 pass\n 0 fail',
+    );
+    expect(runs).toHaveLength(2);
+    expect(runs[0]).toMatchObject({
+      cmd: 'bun test > /tmp/full.log 2>&1',
+      outcome: 'unknown',
+      summary: [],
+    });
+    expect(runs[1]).toMatchObject({
+      cmd: 'bun test tests/flow.test.ts 2>&1',
+      summary: ['20 pass', '0 fail'],
+    });
+  });
+
+  test('every check in a chained command is its own run', () => {
+    // Shape of a captured release check: bundle, tests into a log, then the eval.
+    const runs = commandRuns(
+      'bun run bundle 2>&1 | tail -2; bun test > /tmp/tt.log 2>&1; tail -3 /tmp/tt.log; bun scripts/eval-summaries.ts >/dev/null; grep "checks pass" report.md',
+      false,
+      'Bundled 4 modules\n 71 pass\n 0 fail\n**57/57 checks pass.**',
+    );
+    expect(runs.map((r) => r.kind)).toEqual(['build', 'test', 'eval']);
+    expect(runs[1]).toMatchObject({ outcome: 'passed', summary: ['71 pass', '0 fail'] });
+    expect(runs[2]).toMatchObject({
+      outcome: 'passed',
+      summary: ['**57/57 checks pass.**'],
+    });
+    // The test run no longer carries the eval's result line.
+    expect(runs[1]!.summary.join(' ')).not.toContain('checks');
+    const chained = commandRuns(
+      'bun run bundle 2>&1 | tail -1 && bun x tsc --noEmit && bun test > /tmp/tt.log 2>&1; tail -2 /tmp/tt.log',
+      false,
+      'ok\n 96 pass\n 0 fail',
+    );
+    expect(chained.map((r) => [r.kind, r.cmd])).toEqual([
+      ['build', 'bun run bundle 2>&1'],
+      ['typecheck', 'bun x tsc --noEmit'],
+      ['test', 'bun test > /tmp/tt.log 2>&1'],
+    ]);
+    // A failure in a chain of checks can't be pinned on one of them.
+    expect(
+      commandRuns('bun x tsc --noEmit && bun test', true, '').every(
+        (r) => r.outcome === 'unknown',
+      ),
+    ).toBe(true);
+    expect(commandRuns('bun x tsc --noEmit', true, '')[0]!.outcome).toBe('failed');
   });
 
   test('a silent type check with a hidden status remains unknown', () => {
@@ -178,4 +296,14 @@ describe('plans', () => {
     parseClaudeLines(log.text(), s);
     expect(s.records.find((r: any) => r.kind === 'plan')?.markdown).toBe('# Final plan');
   });
+});
+
+test('receipt commands keep their shell quoting', () => {
+  expect(shellJoin(['bash', '-c', 'bun run typecheck && bun test'])).toBe(
+    "bash -c 'bun run typecheck && bun test'",
+  );
+  expect(shellJoin(['env', 'CLI=<repo>/dist/x.mjs', 'bun', 'test'])).toBe(
+    'env CLI=<repo>/dist/x.mjs bun test',
+  );
+  expect(shellJoin(['echo', "it's"])).toBe("echo 'it'\\''s'");
 });

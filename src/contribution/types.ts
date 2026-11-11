@@ -3,6 +3,8 @@ export interface AgentRole {
   mode: 'delegated' | 'inline';
   /** The actual host invocation id, not an invented persona or model name. */
   agentId?: string;
+  /** The model the host ran this agent on, as the coordinator passed it (e.g. `sonnet`). */
+  model?: string;
 }
 
 export interface SourceRef {
@@ -189,13 +191,31 @@ export interface ReviewInput {
   codeSourcesSha256?: string;
   /** Present on new comic renders; absent on legacy packets and comic-free PRs. */
   comic?: { imagePath: string; scriptPath: string; panelCount: number };
+  /**
+   * Leads from the evidence graph: behavior/test files no passing check followed
+   * after their last captured edit, and hunks no captured edit explains. Check the
+   * body makes no verification or attribution claim about them it can't support.
+   */
+  graphLeads?: {
+    unverified: { file: string; why: string }[];
+    unexplained: {
+      diff: string;
+      file: string;
+      commits: string[];
+      removalOnly: boolean;
+    }[];
+  };
   /** Run-relative evidence paths for the reviewer. */
   artifacts: string[];
 }
 
 export interface ReviewResult {
-  status: 'current' | 'incomplete' | 'missing' | 'stale' | 'invalid';
-  mode?: 'delegated' | 'inline';
+  /**
+   * `skipped`: a brief path (lean: no review; reviewed-brief: one slim reviewer
+   * whose corrections were applied), not the full independent review.
+   */
+  status: 'current' | 'incomplete' | 'missing' | 'stale' | 'invalid' | 'skipped';
+  mode?: 'delegated' | 'inline' | 'lean' | 'reviewed-brief';
   issues: string[];
   guidanceStatus: GuidanceResult['status'];
   assessments: Assessment[];
@@ -203,4 +223,9 @@ export interface ReviewResult {
   sources: GuidanceSource[];
   comicReview?: ComicReview;
   bodyReview?: BodyReview;
+  /**
+   * review.json's reviewer.model; null when a review.json was read but names
+   * no model. Absent when there is no readable review.json.
+   */
+  reviewerModel?: string | null;
 }

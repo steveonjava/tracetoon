@@ -89,6 +89,8 @@ export function publishProblem(
     return 'Preparation artifacts are missing; refresh this task.';
   }
   const review = readJson<{ status: string }>(run, 'review-result.json');
+  // The lean brief path (render --lean) needs no separate review.
+  if (review?.status === 'skipped') return;
   const input = readJson<{ fingerprint: string }>(run, 'review-input.json');
   const submitted = readJson<{ inputFingerprint: string }>(run, 'review.json');
   if (

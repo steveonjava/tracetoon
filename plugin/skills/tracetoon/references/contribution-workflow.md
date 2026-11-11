@@ -5,6 +5,9 @@ the CLI does not start another model or need model credentials. Use the current
 host's actual delegation tool when available. Record actual invocation ids, not
 persona names. If delegation is unavailable, perform each phase sequentially with
 `mode: "inline"`; the render output must say inline draft / self-review.
+Drafting inline, you follow the drafter prompt below yourself, including its
+evidence-brief steps (`tracetoon query brief`); they apply to whoever drafts,
+not only to a delegated drafter.
 
 Start each role in a fresh context when supported. Pass its focused packet from
 `role-packets.json`; use batch evidence expansion instead of copying full transcripts.
@@ -124,6 +127,44 @@ existing rendering. Human-only sections must never be filled in by an agent.
 > For combined shell invocations, expand the full command and output and map
 > each outcome to its producing command. Keep receipt metadata in the local map;
 > draft concrete commands and results without general verification assurances.
+>
+> Draft from the run's evidence brief (`tracetoon query brief --run <id>`, also
+> printed by `prepare` and at the top of `evidence-notes.md`); read all of it,
+> never cut with `head` or `tail`. Its `limits` rows come first and, with the
+> rules in drafting.md, are instructions, never PR text. `changes` groups the diff into change units;
+> `commitMessages` gives each commit sentence and, in `implementedBy`, the file
+> that carries it: name that file for the behavior, and where `implementedBy`
+> is empty describe the behavior without naming a file. Call code new only if
+> it is in `newSymbols`. State plainly what the patch shows; attribute only
+> reasons, results and scope remarks the patch can't show to the request or
+> commit message that says them, and never invent a motive. Say what the code
+> did before only where the removed lines, `changes.was` or the request show
+> it, quoting values. Write the consequences (what changes for users or
+> callers, the riskiest part, what is deliberately left alone), every `limits`
+> row of kind `open` as an open point, what the added tests check (`tests`
+> rows; no test counts or helper names) and one line for `housekeeping`. No
+> blanket negatives ("no X was run") unless an open limit states one; give
+> mechanism claims their conditions instead of "always" or "any". Group by
+> behavior, not file by file, and say each thing once. In the review path,
+> name the files to start with, the riskiest change and the feedback wanted.
+> Validation follows the rules above (receipts and dated log runs, exact
+> commands and counts); a check the repository requires with no current
+> receipt is run once with `tracetoon check`.
+> Say how the work came about where the brief's `requests` rows show it: the
+> goal request, decisions taken and approaches dropped, in one or two
+> sentences, attributed to the person or plan that says it.
+> Keep the concrete values a brief row gives (model names, counts, versions,
+> output shapes) rather than a vaguer paraphrase; cover changed defaults, JSON
+> shapes and error paths as consequences; name each added test file and what
+> it checks in the prose. Write "per the commit message" only for reasons and
+> results the diff can't show.
+> Read every behavior hunk the brief cites (diff refs like `diff:120-141`) and
+> cite them as behaviorChecks evidence. `query why <path>` drills into one file
+> and `query turn <S#>` into one request, including dead-end edits. Do not
+> describe a file in `query unverified` as tested or verified. Graph links are captured evidence; a
+> missing link means not captured, not absent. Before writing that a check was
+> not run, expand the session's commands: a chained command can hold several
+> checks.
 
 ### change-map.json (local, never posted)
 
@@ -297,6 +338,14 @@ MSR 2026). The review has three passes:
    `inferredStart` (where you would start reviewing). This checks whether the
    text alone gets the change across. A reader who can't tell what changed
    has learned little from the description.
+   With an evidence brief, also read it (`tracetoon query brief --run <id>`)
+   and render's brief check (open sentences, uncovered rows). Flag a file or
+   function named for a behavior the patch places elsewhere (`implementedBy`),
+   "new" for code not in `newSymbols`, "always/only/no longer" where a branch
+   differs, old behavior the removed lines don't show, blanket negatives no
+   open limit states, a result or remark only a commit message makes stated as
+   fact, any `limits` row of kind `open` the body leaves out, and any concrete
+   value or consequence a brief row states that the body dropped or blurred.
 2. **Claim audit, after reading the diff.** For each independent factual clause in the title or body that
    makes a factual claim (behavior, scope, cause, result, example), record a
    verdict:
@@ -309,6 +358,17 @@ MSR 2026). The review has three passes:
    would contradict it, not only one that agrees. Cite `diff:`, `digest:` or
    `author:` evidence; only `unsupported` may have none.
 
+   Also read `graphLeads` in review-input.json: behavior and test files no
+   passing check followed after their last captured edit, and hunks no captured
+   edit explains. In the claim audit, a verification claim that covers an
+   unverified file is not `supported`, and a user request or agent session
+   credited with an unexplained hunk needs other evidence (a commit explanation,
+   `author.md`). Use `tracetoon query why <path|H#> --run <id>` to check who
+   asked for a change and `query stale <R#>` to see which files a cited run
+   did not see. Leads are where to look, not findings: do not ask the drafter
+   to say a check was not run until the session's raw commands confirm it.
+   In correction rounds, every new or changed claim about conditional behavior
+   (what happens when an option is or isn't given) needs its own `diff:` ref.
 3. **Coverage.** List significant behavior the diff changes that the body
    omits or misdescribes, with `diff:` evidence. Use `change-map.json`, when
    present, including its within-file `behaviorChecks`, as a list of what to look

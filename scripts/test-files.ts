@@ -135,6 +135,10 @@ export async function runTestFiles(options: {
           [
             'test',
             file,
+            // Many tests spawn the CLI or a fake reviewer; Bun's 5s default is too tight on
+            // loaded CI runners. (bunfig.toml's `timeout` is ignored by Bun 1.3.)
+            '--timeout',
+            '30000',
             ...(options.args ?? []),
             ...(report ? ['--reporter=junit', '--reporter-outfile', report] : []),
           ],

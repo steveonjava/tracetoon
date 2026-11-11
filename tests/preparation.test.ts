@@ -54,6 +54,10 @@ test('shared preparation, immutable code snapshots and batch expansion preserve 
   );
   expect(source[0].revision).toBe(sha);
   expect(source[0].content).toContain('chooseProvider');
+  // The base revision resolves to the full merge-base hash the digest records.
+  const base = cli('source', 'README.md', '--run', prepared.run, '--revision', 'base');
+  expect(base[0].revision).toMatch(/^[a-f0-9]{40}$/);
+  expect(base[0].content).toContain('# demo');
   const expanded = cli('expand', `commit:${sha}`, `commit:${sha}`, '--run', prepared.run);
   expect(expanded).toHaveLength(2);
   expect(expanded[0].ref).toBe(`commit:${sha}`);

@@ -408,6 +408,52 @@ describe('render and publish', () => {
     expect(decodeMeta(create.body)?.submission).toBe(approval.code);
   });
 
+  test("every gh call names the one target repo, not gh's default (issue 52)", () => {
+    const { repo, runDir } = prepared();
+    git(repo.root, ['remote', 'add', 'upstream', 'https://github.com/upstream/demo.git']);
+    env.FAKE_GH_REPO = 'upstream/demo';
+    expect(cli(repo.root, 'context').json.repo).toBe('upstream/demo');
+    const r = cli(repo.root, 'render');
+    expect(r.code).toBe(0);
+    expect(r.json.repo).toBe('upstream/demo');
+    const text = spawnSync(process.execPath, [CLI, 'render'], {
+      cwd: repo.root,
+      env,
+      encoding: 'utf8',
+    }).stdout;
+    expect(text).toContain('PR target: upstream/demo');
+    expect(cli(repo.root, 'publish', '--push').code).toBe(0);
+    const approval = JSON.parse(readFileSync(join(runDir, 'approval.json'), 'utf8'));
+    expect(approval.repo).toBe('upstream/demo');
+    // Every call that reads or writes PRs or repo metadata carries the same repo.
+    const writes = ghCalls().filter(
+      (c) =>
+        c.args[0] === 'pr' ||
+        (c.args[0] === 'repo' && c.args[1] === 'view' && !c.args.includes('-q')) ||
+        (c.args[0] === 'repo' && c.args.includes('visibility')),
+    );
+    expect(writes.length).toBeGreaterThan(0);
+    for (const c of writes) {
+      const at = c.args.indexOf('--repo');
+      const positional = c.args[0] === 'repo' ? c.args[2] : undefined;
+      expect(at >= 0 ? c.args[at + 1] : positional).toBe('upstream/demo');
+    }
+    expect(ghCalls().some((c) => c.args[1] === 'create')).toBe(true);
+  });
+
+  test('publish refuses when the target repo changed since the render', () => {
+    const { repo } = prepared();
+    git(repo.root, ['remote', 'add', 'upstream', 'https://github.com/upstream/demo.git']);
+    env.FAKE_GH_REPO = 'upstream/demo';
+    expect(cli(repo.root, 'context').code).toBe(0);
+    expect(cli(repo.root, 'render').code).toBe(0);
+    env.FAKE_GH_REPO = 'elsewhere/stale'; // gh's default now points at an unrelated repo
+    const r = cli(repo.root, 'publish', '--push');
+    expect(r.code).not.toBe(0);
+    expect(r.json.error).toMatch(/rendered for upstream\/demo/);
+    expect(ghCalls().some((c) => c.args[1] === 'create')).toBe(false);
+  });
+
   test('a body edited after render must be rendered again', () => {
     const { repo, runDir } = prepared();
     git(repo.root, ['push', '-q', 'origin', 'feature']);

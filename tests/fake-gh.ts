@@ -58,6 +58,10 @@ if (a === 'repo' && b === 'view' && args.some((x) => x.includes('viewerPermissio
   );
   process.exit(0);
 }
+if (a === 'repo' && b === 'view' && args.includes('nameWithOwner')) {
+  process.stdout.write(`${process.env.FAKE_GH_REPO ?? 'acme/demo'}\n`);
+  process.exit(0);
+}
 if (a === 'repo' && b === 'view') {
   process.stdout.write(`${process.env.FAKE_GH_VISIBILITY ?? 'PUBLIC'}\n`);
   process.exit(0);

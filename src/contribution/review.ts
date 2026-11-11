@@ -36,6 +36,7 @@ export function reviewInput(input: {
   changeMap?: boolean;
   changeMapSha256?: string;
   codeSourcesSha256?: string;
+  graphLeads?: ReviewInput['graphLeads'];
 }): ReviewInput {
   const { generatedAt: _time, ...digest } = input.digest;
   const { generatedAt: _fullTime, ...fullDigest } = input.fullDigest ?? input.digest;
@@ -54,6 +55,14 @@ export function reviewInput(input: {
     ...(input.changeMapSha256 ? { changeMapSha256: input.changeMapSha256 } : {}),
     ...(input.codeSourcesSha256 ? { codeSourcesSha256: input.codeSourcesSha256 } : {}),
     ...(input.comic ? { comic: input.comic } : {}),
+    ...(input.graphLeads
+      ? {
+          graphLeads: {
+            unverified: input.graphLeads.unverified.slice(0, 20),
+            unexplained: input.graphLeads.unexplained.slice(0, 20),
+          },
+        }
+      : {}),
   };
   return {
     v: 1,
@@ -72,6 +81,7 @@ export function reviewInput(input: {
       'approval.json',
       ...(input.changeMap ? ['change-map.json'] : []),
       ...(input.codeSourcesSha256 ? ['source-evidence.json'] : []),
+      ...(input.graphLeads ? ['evidence-graph.json'] : []),
       ...(input.comic
         ? ['comic-observation-input.json', input.comic.imagePath, input.comic.scriptPath]
         : []),
@@ -89,7 +99,7 @@ const STATES = [
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === 'object' && !Array.isArray(v);
 
-function evidenceExists(
+export function evidenceExists(
   ref: string,
   input: ReviewInput,
   guidance: GuidanceResult,
@@ -194,6 +204,9 @@ export function loadReview(
     );
     checkRole(value.drafter);
     checkRole(value.reviewer);
+    // Which model the reviewer ran on, so the writer sees when SKILL.md's
+    // "Reviewer model:" was not passed through.
+    base.reviewerModel = value.reviewer.model?.trim() || null;
     requireThat(Array.isArray(value.assessments), 'Review needs an assessments array.');
     const roles = [guidance.guidance?.researcher, value.drafter, value.reviewer].filter(
       (r) => r !== undefined,
@@ -377,7 +390,7 @@ export function reviewLine(review: ReviewResult): string {
       a.state === 'unresolved-conflict',
   );
   return [
-    `Contribution review (advisory): ${review.status}${review.mode === 'inline' ? ' (inline draft / self-review)' : review.mode === 'delegated' ? ' (independent host agents)' : ''}; guidance ${review.guidanceStatus}; ${attention.length} finding(s).`,
+    `Contribution review (advisory): ${review.status}${review.mode === 'inline' ? ' (inline draft / self-review)' : review.mode === 'delegated' ? ' (independent host agents)' : ''}; guidance ${review.guidanceStatus}; ${attention.length} finding(s)${review.reviewerModel !== undefined ? `; Reviewer model: ${review.reviewerModel ?? 'not recorded'}` : ''}.`,
     ...review.issues.map((i) => `  - ${i}`),
     ...attention.map(
       (a) =>

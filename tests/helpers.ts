@@ -1,11 +1,32 @@
-import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { afterAll } from 'bun:test';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { git } from '../src/util/exec.ts';
 
+// The shipped SKILL's `cheap` / `auto` resolve per host agent; tests (and the
+// CLIs they start) see the same host wherever the suite runs.
+process.env.TRACETOON_HOST_AGENT ??= 'claude';
+
+const made: string[] = [];
+// Remove each test file's temp folders when it finishes, so repeated runs
+// don't fill the temp filesystem. TRACETOON_KEEP_TMP=1 keeps them for debugging.
+afterAll(() => {
+  if (process.env.TRACETOON_KEEP_TMP) return;
+  for (const d of made.splice(0)) {
+    try {
+      rmSync(d, { recursive: true, force: true });
+    } catch {
+      // best effort
+    }
+  }
+});
+
 /** A fresh temp folder, as a long path (Windows tmpdir can be an 8.3 short name). */
 export function tempDir(prefix = 'tracetoon-test-'): string {
-  return realpathSync.native(mkdtempSync(join(tmpdir(), prefix)));
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), prefix)));
+  made.push(dir);
+  return dir;
 }
 
 /** A git repo with one base commit on `main` and a `feature` branch checked out. */

@@ -8,6 +8,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Run, TraceDigest } from '../src/digest/build.ts';
 import { checkClaims, sentences, type ClaimInput } from '../src/digest/claims.ts';
+import { checkGraphClaims, type GraphClaimFacts } from '../src/graph/claims.ts';
 import { tempDir } from './helpers.ts';
 
 const run = (over: Partial<Run>): Run => ({
@@ -108,6 +109,19 @@ describe('verification claims', () => {
       ]),
     });
     expect(f[0]?.state).toBe('observed');
+  });
+
+  test('a sentence about what the code does with tests is not a run result', () => {
+    const passing = digest([run({})]);
+    for (const body of [
+      'Test failures are read from test output, so piped runs count, and a session whose tests went from failing to passing is recorded.',
+      'The digest now counts chained test commands by their runner.',
+    ])
+      expect(check(body, passing)).toEqual([]);
+    // A result is still a result.
+    expect(states(check('The tests failed after the change.', passing))).toEqual([
+      'verification:contradicted',
+    ]);
   });
 
   test('a passing run with no later edits: observed', () => {
@@ -505,5 +519,52 @@ describe('false alarms found on real descriptions', () => {
     expect(
       check('Render also writes `evidence-notes.md`, an outline.', digest([]), { root }),
     ).toEqual([]);
+  });
+});
+
+describe('graph-backed claims', () => {
+  const facts: GraphClaimFacts = {
+    commits: ['aaa', 'bbb', 'ccc'],
+    commitClaims: [
+      {
+        id: 'aaa#1',
+        commit: 'aaa',
+        text: 'Found while dogfooding this PR.',
+        assertsResult: false,
+      },
+      {
+        id: 'bbb#1',
+        commit: 'bbb',
+        text: 'Found while dogfooding this PR.',
+        assertsResult: false,
+      },
+      {
+        id: 'ccc#1',
+        commit: 'ccc',
+        text: 'The eval goes from 41/48 to 50/50.',
+        assertsResult: true,
+      },
+    ],
+    runResults: ['12 pass', '0 fail'],
+  };
+  test('a reason one commit gives is not stretched over all of them', () => {
+    const [f] = checkGraphClaims('Three fixes found while dogfooding this PR.', facts);
+    expect(f).toMatchObject({ kind: 'attribution', state: 'not established' });
+    expect(f!.detail).toContain('ccc');
+    expect(
+      checkGraphClaims(
+        'Two of the fixes were found while dogfooding, per the commit messages.',
+        facts,
+      ),
+    ).toEqual([]);
+    expect(checkGraphClaims('The cd fix was found while dogfooding.', facts)).toEqual([]);
+  });
+  test('a result only a commit message reports is not a run', () => {
+    const [f] = checkGraphClaims('The eval now passes 50/50 checks.', facts);
+    expect(f).toMatchObject({ kind: 'verification', evidence: ['ccc#1'] });
+    expect(
+      checkGraphClaims('The commit message reports 50/50 on the eval.', facts),
+    ).toEqual([]);
+    expect(checkGraphClaims('The unit tests report 12 pass.', facts)).toEqual([]);
   });
 });

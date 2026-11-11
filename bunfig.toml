@@ -1,0 +1,3 @@
+[test]
+# Registers the temp-folder cleanup hook for every test file.
+preload = ["./tests/helpers.ts"]

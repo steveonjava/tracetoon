@@ -16,6 +16,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { checkGraphClaims, type GraphClaimFacts } from '../graph/claims.ts';
 import type { Run, TraceDigest } from './build.ts';
 
 export type ClaimState =
@@ -41,6 +42,8 @@ export interface ClaimInput {
   root?: string;
   /** Things the author told Tracetoon (author.md), treated as author-reported. */
   authorText?: string;
+  /** Commit-message sentences, branching changes and run results from the evidence graph. */
+  graph?: GraphClaimFacts;
 }
 
 // ------------------------------------------------------------------ text
@@ -74,6 +77,10 @@ const CHECK_SUBJECT =
 const FAILED = /\b(fail(?:ed|s|ing|ures?)?|errors?)\b/i;
 const RESULT =
   /\b(pass(?:ed|es|ing)?|succeed\w*|failed|fails|failing|clean|green|reports?\b[^.]{0,60}\bfailures?)\b/i;
+const CODE_BEHAVIOR =
+  /\b(?:is|are|now|gets?|get)\s+(?:read|counted|recorded|detected|label(?:l)?ed|parsed|treated|judged|recognized|matched|reported|classified|ignored)\b|\b(?:counts?|detects?|parses?|labels?|records?|recognizes?|classif(?:y|ies)|ignores?)\b[^.]{0,40}\b(?:tests?|runs?|failures?|commands?)\b/i;
+const RAN =
+  /\b(?:ran|was run|were run|passed|failed|succeeded|pass(?:es)? (?:locally|on))\b/i;
 const HISTORICAL =
   /\b(before (?:the )?(?:(?:last|final|later) )?(?:edits|changes|commit)|during (?:development|implementation)|(?:earlier|historical|recorded|captured) (?:implementation )?(?:session|run)|previously)\b/i;
 
@@ -141,6 +148,9 @@ function checkVerification(
   const prose = bare.replace(/`([^`]+)`/g, (code, text: string) =>
     commandCode(text.trim()) ? ' '.repeat(code.length) : code,
   );
+  // A sentence about what the code does with tests ("failures are read from
+  // test output", "the digest counts piped runs") reports no run.
+  if (CODE_BEHAVIOR.test(prose) && !RAN.test(prose)) return undefined;
   const hit =
     VERIFY.exec(prose) ?? (CHECK_SUBJECT.test(bare) ? RESULT.exec(prose) : null);
   const freshness =
@@ -164,7 +174,9 @@ function checkVerification(
   // A named command narrows the runs: `bun test tests/x.test.ts`, `prettier --check`.
   const named = [...s.matchAll(/`([^`]+)`/g)]
     .map((m) => m[1]!.trim())
-    .filter(commandCode);
+    .filter(commandCode)
+    // `tracetoon check` is how a receipt was recorded, not the check itself.
+    .filter((n) => !/^tracetoon\s+check\b/.test(n));
   const kinds = runKindsFor(s);
   let relevant = runs.filter((r) => kinds.includes(r.kind));
   if (named.length)
@@ -290,7 +302,7 @@ function checkVerification(
         s,
         'verification',
         'not established',
-        `${stale.id} ${expected}, but files in the PR changed afterwards; qualify it as a historical result.`,
+        staleDetail(stale, expected, input.digest.files),
         ids,
       );
     const dirty =
@@ -469,6 +481,24 @@ function checkReferences(s: string, input: ClaimInput): ClaimFinding[] {
   return out;
 }
 
+/** Which files a run did not see, from the evidence graph, so the text can qualify precisely. */
+function staleDetail(
+  run: Run,
+  expected: string,
+  files: ClaimInput['digest']['files'],
+): string {
+  const later = run.laterEdits ?? [];
+  if (!later.length)
+    return `${run.id} ${expected}, but files in the PR changed afterwards; qualify it as a historical result.`;
+  const roles = later.map((p) => files.find((f) => f.path === p)?.role ?? 'behavior');
+  const shown =
+    later.length > 3
+      ? `${later.slice(0, 3).join(', ')} and ${later.length - 3} more`
+      : later.join(', ');
+  const docsOnly = roles.every((r) => r === 'docs');
+  return `${run.id} ${expected}, but ${shown} changed afterwards${docsOnly ? ' (documentation only)' : ''}; qualify it as a result from before ${later.length === 1 ? 'that edit' : 'those edits'}, or cite a later run.`;
+}
+
 const finding = (
   quote: string,
   kind: ClaimFinding['kind'],
@@ -496,6 +526,10 @@ export function checkClaims(input: ClaimInput): ClaimFinding[] {
     const a = checkAttribution(s, input);
     if (a) out.push(a);
     out.push(...checkReferences(s, input));
+    if (input.graph && !mentionedBy(input.authorText, s))
+      for (const g of checkGraphClaims(s, input.graph))
+        // One finding per sentence and kind: the shallow checks speak first.
+        if (!out.some((f) => f.quote === g.quote && f.kind === g.kind)) out.push(g);
   }
   return out;
 }
