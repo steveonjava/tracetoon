@@ -5,6 +5,13 @@
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { gh, git } from '../util/exec.ts';
+import {
+  parseGithubRemote as parseRemote,
+  prHead,
+  repoArgs,
+  resolveTarget,
+  type Target,
+} from '../github/target.ts';
 import { privateRepoPath, readSubmittedFile, repoPath } from '../util/repoFiles.ts';
 
 export interface Commit {
@@ -56,6 +63,8 @@ export interface PrTruth {
   usedWorkingTree: boolean;
   dirty: boolean;
   remote?: { owner: string; name: string; url: string };
+  /** The repository every gh call targets; set unless gh was skipped (`noGh`). */
+  target?: Target;
   pr?: ExistingPr;
 }
 
@@ -73,11 +82,6 @@ export function worktreeRoots(cwd: string): string[] {
     .split(/\r?\n/)
     .filter((l) => l.startsWith('worktree '))
     .map((l) => resolve(l.slice('worktree '.length)));
-}
-
-function parseRemote(url: string): { owner: string; name: string } | undefined {
-  const m = /github\.com[:/]([^/]+)\/([^/]+?)(?:\.git)?\/?$/.exec(url.trim());
-  return m ? { owner: m[1]!, name: m[2]! } : undefined;
 }
 
 /**
@@ -149,11 +153,18 @@ function baseRef(refs: Map<string, string>, base: string): string {
   return refs.has(`refs/remotes/origin/${base}`) ? `origin/${base}` : base;
 }
 
-export function existingPr(cwd: string, head: string): ExistingPr | undefined {
+export function existingPr(
+  cwd: string,
+  head: string,
+  repo?: string,
+  originOwner?: string,
+): ExistingPr | undefined {
   const r = gh(cwd, [
     'pr',
     'view',
-    head,
+    // From a fork, the PR's head lives under the fork's owner.
+    prHead(head, originOwner, repo),
+    ...repoArgs(repo),
     '--json',
     'number,url,title,body,baseRefName,headRefName,state',
   ]);
@@ -300,7 +311,13 @@ export function prTruth(cwd: string, opts: TruthOptions = {}): PrTruth {
     : (id!.headSha ?? 'HEAD');
   if (!opts.head && !id!.ok) must(toplevel, ['rev-parse', '--abbrev-ref', 'HEAD']);
   const head = opts.head ?? id!.branch;
-  const pr = opts.noGh ? undefined : existingPr(toplevel, head);
+  const target = opts.noGh ? undefined : resolveTarget(toplevel);
+  const originOwner = parseRemote(
+    git(toplevel, ['remote', 'get-url', 'origin']).stdout,
+  )?.owner;
+  const pr = opts.noGh
+    ? undefined
+    : existingPr(toplevel, head, target?.repo, originOwner);
   const known = opts.base ?? pr?.baseRefName;
   const refs = baseRefs(toplevel, known ? [known] : []);
   const base = known ?? chooseBase(refs);
@@ -354,6 +371,7 @@ export function prTruth(cwd: string, opts: TruthOptions = {}): PrTruth {
     usedWorkingTree,
     dirty,
     remote: parsed ? { ...parsed, url } : undefined,
+    target,
     pr,
   };
 }

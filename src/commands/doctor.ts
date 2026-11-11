@@ -12,6 +12,7 @@ import { loadConfig, userConfigPath } from '../config.ts';
 import { readLocal } from '../util/localJson.ts';
 import { emit, type OutOpts } from './output.ts';
 import { nextStep, routeStatuses } from '../comic/routes.ts';
+import { resolveTarget, targetLine, type Target } from '../github/target.ts';
 
 /**
  * Whether the signed-in gh account can push to this repo, so a 403 shows up
@@ -19,8 +20,15 @@ import { nextStep, routeStatuses } from '../comic/routes.ts';
  */
 export function pushAccess(
   cwd: string,
+  repo?: string,
 ): { repo: string; account?: string; canPush: boolean } | undefined {
-  const view = gh(cwd, ['repo', 'view', '--json', 'nameWithOwner,viewerPermission']);
+  const view = gh(cwd, [
+    'repo',
+    'view',
+    ...(repo ? [repo] : []),
+    '--json',
+    'nameWithOwner,viewerPermission',
+  ]);
   if (!view.ok) return undefined;
   try {
     const { nameWithOwner, viewerPermission } = JSON.parse(view.stdout) as {
@@ -158,6 +166,7 @@ export function doctor(
   const ghV = ghOut.ok ? version(ghOut.stdout) : undefined;
   const ghAuth = ghV ? gh(cwd, ['auth', 'status']).ok : false;
   const top = git(cwd, ['rev-parse', '--show-toplevel']);
+  const target: Target | undefined = top.ok && ghAuth ? resolveTarget(cwd) : undefined;
   const agents = ADAPTERS.map((a) => {
     const home = a.home();
     const sessions = home ? a.count() : undefined;
@@ -195,7 +204,10 @@ export function doctor(
     prHook: hooks,
     ...(opts.probe ? { unknownRecordTypes: probe() } : {}),
     imageProviders: routeStatuses(top.ok ? top.stdout.trim() : undefined),
-    push: top.ok && ghAuth ? (pushAccess(cwd) ?? null) : null,
+    // The branch is pushed to origin; the PR is opened in the target repo.
+    target: target ?? null,
+    push:
+      top.ok && ghAuth ? (pushAccess(cwd, target?.origin ?? target?.repo) ?? null) : null,
     evidenceGraph: graphEngineAvailable(),
   };
   const comics = nextStep(
@@ -263,6 +275,7 @@ export function doctor(
       }`,
       `  next: ${comics.text}`,
     );
+    if (top.ok && ghAuth) lines.push(targetLine(report.target ?? undefined));
     if (report.push && !report.push.canPush)
       lines.push(
         `push access: ${report.push.account ?? 'this gh account'} can't push to ${report.push.repo}. Publishing will fail: switch accounts (gh auth switch), or push to a fork.`,

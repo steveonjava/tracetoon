@@ -71,6 +71,13 @@ import type { AiPolicy } from '../github/repoContext.ts';
 import { defaultBase, prTruth, type PrTruth } from '../git/pr.ts';
 import { findRun, readJson, readText, writeJson, type Run } from '../run.ts';
 import { repoWeb } from '../github/history.ts';
+import {
+  prHead,
+  repoArgs,
+  resolveTarget,
+  targetLine,
+  type Target,
+} from '../github/target.ts';
 import type { TitleRules } from '../github/titleRules.ts';
 import { checkTitle, titleLine } from '../digest/titleCheck.ts';
 import { gh, git } from '../util/exec.ts';
@@ -101,6 +108,9 @@ const COMIC_MARKER = '{{tracetoon:comic}}';
 
 interface Context {
   base?: string;
+  /** The target repo `context` resolved; render records it, publish enforces it. */
+  target?: Target | null;
+  repo?: string | null;
   contribution?: GuidanceRequest;
   aiPolicy: AiPolicy;
   existingPr: { number: number; url: string; title: string; body: string } | null;
@@ -162,6 +172,8 @@ export interface Approval {
   prNumber?: number;
   base: string;
   head: string;
+  /** The repository the PR goes to (`owner/name`), fixed at render; every gh call uses it. */
+  repo?: string;
   policy: AiPolicy['verdict'];
   /** The repo's agent instructions say never to open a PR. */
   noPullRequests?: boolean;
@@ -176,7 +188,7 @@ export interface Approval {
 const sha = (s: string | Uint8Array) => createHash('sha256').update(s).digest('hex');
 const codeFor = (approval: Approval, body: string) =>
   approvalCode(
-    `${approval.title}\n\0${body}\n\0${approval.comicSha ?? ''}\n\0${objectHash({ submission: approval.submission, head: approval.head, base: approval.base, mode: approval.mode, prNumber: approval.prNumber, ...(approval.workspaceFingerprint ? { workspaceFingerprint: approval.workspaceFingerprint, checksSha: approval.checksSha, originSha: approval.originSha } : {}) })}`,
+    `${approval.title}\n\0${body}\n\0${approval.comicSha ?? ''}\n\0${objectHash({ submission: approval.submission, head: approval.head, base: approval.base, mode: approval.mode, prNumber: approval.prNumber, ...(approval.repo ? { repo: approval.repo } : {}), ...(approval.workspaceFingerprint ? { workspaceFingerprint: approval.workspaceFingerprint, checksSha: approval.checksSha, originSha: approval.originSha } : {}) })}`,
   );
 
 /**
@@ -204,26 +216,7 @@ export function digestStale(
   return `${added && added !== '0' ? `${added} commit(s) were` : 'Commits were'} added after the digest; run \`tracetoon digest\` again so the description and checks see them.`;
 }
 
-/**
- * The `--head` for `gh pr create`: `owner:branch` when origin is a fork of the
- * repository gh targets (its default repo), else the bare branch. Without the
- * owner, GitHub looks for the branch in the base repository and refuses.
- */
-export function prHead(
-  branch: string,
-  originOwner: string | undefined,
-  baseRepo: string | undefined,
-): string {
-  const baseOwner = baseRepo?.split('/')[0];
-  return originOwner && baseOwner && originOwner.toLowerCase() !== baseOwner.toLowerCase()
-    ? `${originOwner}:${branch}`
-    : branch;
-}
-function ghBaseRepo(root: string): string | undefined {
-  const r = gh(root, ['repo', 'view', '--json', 'nameWithOwner', '-q', '.nameWithOwner']);
-  const name = r.ok ? r.stdout.trim() : '';
-  return /^[^/\s]+\/[^/\s]+$/.test(name) ? name : undefined;
-}
+export { prHead };
 function loadRun(cwd: string, runId?: string): { run: Run; truth: PrTruth } {
   const truth = prTruth(cwd, { noGh: true });
   return { run: findRun(truth.gitDir, runId), truth };
@@ -370,6 +363,10 @@ export function renderCmd(cwd: string, opts: RenderOpts): Approval {
     throw new UserError('This run has no context.json. Run `tracetoon context` first.');
   if (ctx.base && ctx.base !== truth.base)
     truth = prTruth(cwd, { base: ctx.base, noGh: true });
+  // One target repo for this render; publish refuses to post anywhere else.
+  const target: Target | undefined =
+    ctx.target ?? (ctx.repo ? { repo: ctx.repo } : undefined);
+  const targetRepo = target?.repo;
   const captured = readJson<SubmissionSnapshot>(run, 'submission.json');
   if (!captured || !sameSubmission(captured, submissionSnapshot(truth)))
     throw new UserError(
@@ -495,6 +492,7 @@ export function renderCmd(cwd: string, opts: RenderOpts): Approval {
     prNumber: ctx.existingPr?.number,
     base: prBase(truth.toplevel, digest.pr.base),
     head: digest.pr.head,
+    ...(targetRepo ? { repo: targetRepo } : {}),
     policy: ctx.aiPolicy.verdict,
     ...(ctx.aiPolicy.noPullRequests ? { noPullRequests: true } : {}),
     ambiguousSessions: digest.sessions
@@ -683,6 +681,7 @@ export function renderCmd(cwd: string, opts: RenderOpts): Approval {
         // A PR the leak scan stops is the first thing the user must hear.
         leakBlocks(approval) ? leakNotice(approval) : '',
         `Rendered "${title}" (${approval.mode === 'edit' ? `update PR #${approval.prNumber}` : 'new PR'})${comic ? ' with comic' : ''}`,
+        approval.repo ? targetLine(target) : '',
         approval.mode === 'create'
           ? `PR base: ${approval.base}${approval.base !== digest.pr.base ? ` (the story covers changes since ${digest.pr.base.slice(0, 12)})` : ''}`
           : '',
@@ -819,8 +818,16 @@ function ghVersionAtLeast(cwd: string, min: [number, number]): boolean {
   return maj > min[0] || (maj === min[0] && minor >= min[1]);
 }
 
-function repoIsPrivate(cwd: string): boolean {
-  const r = gh(cwd, ['repo', 'view', '--json', 'visibility', '-q', '.visibility']);
+function repoIsPrivate(cwd: string, repo?: string): boolean {
+  const r = gh(cwd, [
+    'repo',
+    'view',
+    ...(repo ? [repo] : []),
+    '--json',
+    'visibility',
+    '-q',
+    '.visibility',
+  ]);
   return r.ok && /private|internal/i.test(r.stdout);
 }
 
@@ -881,7 +888,8 @@ function hostComic(
     };
   };
   const wantAttach =
-    mode === 'attach' || (mode === 'auto' && canAttach && repoIsPrivate(truth.toplevel));
+    mode === 'attach' ||
+    (mode === 'auto' && canAttach && repoIsPrivate(truth.toplevel, approval.repo));
   if (wantAttach) return tryAttach();
   if (!web) {
     if (canAttach) return tryAttach();
@@ -1077,6 +1085,14 @@ function publishImpl(cwd: string, opts: PublishOpts): void {
     }
   }
 
+  // Every gh call below names the repo that was approved; gh's own default never decides.
+  const nowTarget = resolveTarget(truth.toplevel)?.repo;
+  if (approval.repo && nowTarget?.toLowerCase() !== approval.repo.toLowerCase())
+    throw new UserError(
+      `The PR was rendered for ${approval.repo}, but this clone now targets ${nowTarget ?? 'no repository'} (origin or gh's default repo changed). Run \`tracetoon context\` (not offline) and \`tracetoon render\` again.`,
+    );
+  const repo = repoArgs(approval.repo);
+
   const hosted =
     progress.hosted ??
     hostComic(truth, run, approval, body, opts.hosting ?? config.hosting);
@@ -1088,19 +1104,26 @@ function publishImpl(cwd: string, opts: PublishOpts): void {
   if (hosted.attach) args.push('--attach', hosted.attach);
   let url: string;
   if (approval.mode === 'edit' && approval.prNumber) {
-    const r = gh(truth.toplevel, ['pr', 'edit', String(approval.prNumber), ...args]);
+    const r = gh(truth.toplevel, [
+      'pr',
+      'edit',
+      String(approval.prNumber),
+      ...repo,
+      ...args,
+    ]);
     if (!r.ok) throw new UserError(`gh pr edit failed: ${r.stderr.trim()}`);
     url = gh(truth.toplevel, [
       'pr',
       'view',
       String(approval.prNumber),
+      ...repo,
       '--json',
       'url',
       '-q',
       '.url',
     ]).stdout.trim();
   } else {
-    const head = prHead(approval.head, truth.remote?.owner, ghBaseRepo(truth.toplevel));
+    const head = prHead(approval.head, truth.remote?.owner, approval.repo);
     const headOwner = head.includes(':') ? head.split(':')[0]!.toLowerCase() : undefined;
     // A timed-out create may have succeeded on GitHub. Reconcile before every create.
     const listing = gh(truth.toplevel, [
@@ -1108,6 +1131,7 @@ function publishImpl(cwd: string, opts: PublishOpts): void {
       'list',
       '--state',
       'open',
+      ...repo,
       '--head',
       approval.head,
       '--base',
@@ -1162,7 +1186,16 @@ function publishImpl(cwd: string, opts: PublishOpts): void {
         throw new UserError(
           'A PR already exists for this branch and base. Refresh context and review its update instead of creating another.',
         );
-      const create = ['pr', 'create', '--base', approval.base, '--head', head, ...args];
+      const create = [
+        'pr',
+        'create',
+        ...repo,
+        '--base',
+        approval.base,
+        '--head',
+        head,
+        ...args,
+      ];
       if (opts.draft) create.push('--draft');
       progress.attemptedCreate = true;
       writeLocal(progressPath, progress);

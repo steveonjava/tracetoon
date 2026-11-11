@@ -219,7 +219,9 @@ describe('comic end to end', () => {
     ]);
     const on = cli(repo.root, 'context');
     expect(on.json.comic.recentStyles).toEqual(['linocut print', 'noir']);
-    const list = ghCalls().find((c) => c.args[0] === 'pr' && c.args[1] === 'list')!;
+    const list = ghCalls().find(
+      (c) => c.args[0] === 'pr' && c.args[1] === 'list' && c.args.includes('--search'),
+    )!;
     expect(list.args[list.args.indexOf('--limit') + 1]).toBe('20');
 
     writeFileSync(env.TRACETOON_CONFIG!, JSON.stringify({ comic: false, theme: 'pets' }));
@@ -227,7 +229,11 @@ describe('comic end to end', () => {
     const off = cli(repo.root, 'context');
     expect(off.json.comic.recentStyles).toEqual([]);
     expect(off.json.config.theme).toBeUndefined();
-    expect(ghCalls().some((c) => c.args[0] === 'pr' && c.args[1] === 'list')).toBe(false);
+    expect(
+      ghCalls().some(
+        (c) => c.args[0] === 'pr' && c.args[1] === 'list' && c.args.includes('--search'),
+      ),
+    ).toBe(false);
   });
 
   test('no approved image route: exit 5 with the options, and the PR goes out without a comic', () => {

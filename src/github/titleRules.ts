@@ -8,6 +8,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { gh } from '../util/exec.ts';
+import { repoArgs } from './target.ts';
 
 export interface TitleRules {
   /** Lines from the repo's own docs that talk about PR titles. */
@@ -223,6 +224,7 @@ export function readTitleRules(
       'list',
       '--state',
       'merged',
+      ...repoArgs(opts.repo),
       '--limit',
       '20',
       '--json',
