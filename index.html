@@ -224,9 +224,9 @@
         </div>
 
         <div class="proof">
-          <div><b>83–34 · 69–17</b><span>judges' picks for the graph PR over Tracetoon without the graph (Codex · Claude Code, 61 real PRs)</span></div>
+          <div><b>79–38 · 60–21</b><span>judges' picks for the graph PR over Tracetoon without the graph (Codex · Claude Code, 61 real PRs)</span></div>
           <div><b>82%</b><span>of key facts conveyed, vs 72% without the graph (Codex)</span></div>
-          <div><b>−46%</b><span>cost per PR on Codex: $0.23 vs $0.45</span></div>
+          <div><b>−70%</b><span>cost per PR on Codex: $0.13 vs $0.45</span></div>
         </div>
         <a class="more" href="evidence-graph-61.html">Read the full results →</a>
       </div>
@@ -255,7 +255,7 @@
           <li>Tracetoon, old workflow <span class="bar"><i style="width:65.3%"></i></span><b>65</b></li>
           <li>Tracetoon + graph <span class="bar"><i class="win" style="width:80.4%"></i></span><b>80</b></li>
         </ul>
-        <div class="stat"><b>83–34 · 69–17</b><span>Head-to-head picks for the graph PR over Tracetoon's own no-graph workflow on Codex and Claude Code, across 61 real PRs. A pick only counts when two judges each read both orders and agree.</span></div>
+        <div class="stat"><b>79–38 · 60–21</b><span>Head-to-head picks for the graph PR over Tracetoon's own no-graph workflow on Codex and Claude Code, across 61 real PRs. A pick only counts when two judges each read both orders and agree.</span></div>
       </div>
     </div>
   </section>
@@ -322,16 +322,16 @@
         <p>Without a map, an expensive model rereads your source to check its own claims, two or three times per PR. With the graph, that work is done once, before any model runs. Then:</p>
         <ul>
           <li><strong>One strong writer</strong> drafts from a 2–3K-token brief instead of the whole session history, and writes 7K tokens instead of 22K.</li>
-          <li><strong>Two cheap reviewers</strong> (Haiku or Luna, at extra-high reasoning effort) check a short packet. That costs about 4¢ per PR on Claude and under 1¢ on Codex.</li>
+          <li><strong>Two cheap reviewers</strong> (Haiku or Luna, at extra-high reasoning effort) check a short packet. That costs about 6¢ per PR on Claude and under 1¢ on Codex.</li>
           <li><strong>One edit pass.</strong> The reviewers' findings merge into a single list. There are no repeat review rounds and no forked subagents.</li>
         </ul>
         <ul class="score" aria-label="Cost per PR in US dollars">
           <li>Claude, no graph <span class="bar"><i style="width:100%"></i></span><b>$0.65</b></li>
-          <li>Claude + graph <span class="bar"><i class="win" style="width:63.5%"></i></span><b>$0.42</b></li>
+          <li>Claude + graph <span class="bar"><i class="win" style="width:52.6%"></i></span><b>$0.34</b></li>
           <li>Codex, no graph <span class="bar"><i style="width:68.3%"></i></span><b>$0.45</b></li>
-          <li>Codex + graph <span class="bar"><i class="win" style="width:34.4%"></i></span><b>$0.23</b></li>
+          <li>Codex + graph <span class="bar"><i class="win" style="width:19.5%"></i></span><b>$0.13</b></li>
         </ul>
-        <div class="stat"><b>−31% · −46%</b><span>typical cost per PR on Claude Code and Codex (paired per PR; the bars show averages), while judges picked the graph PRs more often on both. <a href="evidence-graph-61.html#cost">See the cost data →</a></span></div>
+        <div class="stat"><b>−43% · −70%</b><span>typical cost per PR on Claude Code and Codex (paired per PR; the bars show averages), while judges picked the graph PRs more often on both. <a href="evidence-graph-61.html#cost">See the cost data →</a></span></div>
       </div>
     </div>
   </section>
@@ -412,22 +412,22 @@
     <div class="wrap">
       <details>
         <summary>How we measured (and what's not perfect yet)</summary>
-        <p>The numbers come from <strong>prbench</strong>: 61 real PRs from 12 repositories, each with its original agent session logs, and 3 drafts per PR for each setup (the brief was tuned on 25 of them; on the 36 untouched PRs judges picked the graph 51–14 on Codex and 43–11 on Claude Code). Each PR has a fact sheet drafted from the diff and the sessions and reviewed by a six-model expert panel. Two AI judges per provider scored every draft against that fact sheet with a 10-item reviewer rubric: Opus 5.5 and Sonnet 5.5 for Claude Code, Sol 6.1 and Terra 6.1 for Codex. A head-to-head pick counts only when both judges, each reading the pair in both orders, pick the same draft. Every factual error a judge flagged was checked against the evidence by two more models. Each comparison uses the same model with the graph and without it.</p>
+        <p>The numbers come from <strong>prbench</strong>: 61 real PRs from 12 repositories, each with its original agent session logs, and 3 drafts per PR for each setup (the brief was tuned on 25 of them; on the 36 untouched PRs judges picked the graph 51–21 on Codex and 42–11 on Claude Code). Each PR has a fact sheet drafted from the diff and the sessions and reviewed by a six-model expert panel. Two AI judges per provider scored every draft against that fact sheet with a 10-item reviewer rubric: Opus 5.5 and Sonnet 5.5 for Claude Code, Sol 6.1 and Terra 6.1 for Codex. A head-to-head pick counts only when both judges, each reading the pair in both orders, pick the same draft. Every factual error a judge flagged was checked against the evidence by two more models. Each comparison uses the same model with the graph and without it.</p>
         <div class="tablewrap">
           <table>
             <thead><tr><th></th><th>Claude Code · Sonnet 5.5</th><th>Codex · Terra 6.1</th></tr></thead>
             <tbody>
-              <tr><td>Head-to-head picks (graph–no graph)</td><td>69–17</td><td>83–34</td></tr>
-              <tr><td>Key facts conveyed</td><td>75% vs 76%</td><td>82% vs 72%</td></tr>
-              <tr><td>Confirmed factual errors per PR</td><td>0.68 vs 0.81</td><td>0.26 vs 0.22</td></tr>
-              <tr><td>Cost per PR</td><td>$0.415 vs $0.654 (−31%)</td><td>$0.225 vs $0.447 (−46%)</td></tr>
+              <tr><td>Head-to-head picks (graph–no graph)</td><td>60–21</td><td>79–38</td></tr>
+              <tr><td>Key facts conveyed</td><td>73% vs 77%</td><td>82% vs 72%</td></tr>
+              <tr><td>Confirmed factual errors per PR</td><td>0.47 vs 0.84</td><td>0.33 vs 0.16</td></tr>
+              <tr><td>Cost per PR</td><td>$0.344 vs $0.654 (−43%)</td><td>$0.128 vs $0.447 (−70%)</td></tr>
             </tbody>
           </table>
         </div>
         <ul>
           <li>The same 61 PRs were used to tune Tracetoon and to evaluate it; there is no separate held-out set.</li>
-          <li>Not perfect yet: on Claude Code, graph drafts respect fewer of the open questions in the evidence, and take about 1.6× as long to write.</li>
-          <li>On Codex the graph made slightly more confirmed factual errors (0.26 vs 0.22 per PR, not a significant difference), so it misses our own strict error margin there. The full write-up lists every criterion.</li>
+          <li>Not perfect yet: on Claude Code, graph drafts respect fewer of the open questions in the evidence, convey slightly fewer key facts, and take about 1.6× as long to write.</li>
+          <li>On Codex the graph made more confirmed factual errors (0.33 vs 0.16 per PR), so it fails our own strict error margin there. About a third come from two known bugs in the generated Validation section, which are being fixed. The full write-up lists every criterion.</li>
         </ul>
         <p><a href="evidence-graph-61.html">Read the full write-up, with every chart, a worked example and the run details →</a> The earlier 5-PR report is <a href="evidence-graph.html">still available</a>.</p>
       </details>

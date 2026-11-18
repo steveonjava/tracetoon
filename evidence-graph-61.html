@@ -1,4 +1,4 @@
-<!doctype html><html><head><title>Tracetoon Evidence Results</title><meta name="description" content="On 61 real pull requests, judges preferred Tracetoon's evidence-graph PR descriptions to its original multi-agent workflow 83 to 34 on Codex and 69 to 17 on Claude Code, at 46% and 31% lower cost per PR."><link rel="icon" href="favicon.svg" type="image/svg+xml"><meta property="og:title" content="An embedded Relate graph made our PR writer better and cheaper"><meta property="og:image" content="https://tracetoon.ai/img/comic-cost.webp"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Bangers&display=swap" rel="stylesheet"><style>  /* shared site header: identical on index.html and evidence-graph.html */
+<!doctype html><html><head><title>Tracetoon Evidence Results</title><meta name="description" content="On 61 real pull requests, judges preferred Tracetoon's evidence-graph PR descriptions to its original multi-agent workflow 79 to 38 on Codex and 60 to 21 on Claude Code, at 70% and 43% lower cost per PR."><link rel="icon" href="favicon.svg" type="image/svg+xml"><meta property="og:title" content="An embedded Relate graph made our PR writer better and cheaper"><meta property="og:image" content="https://tracetoon.ai/img/comic-cost.webp"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Bangers&display=swap" rel="stylesheet"><style>  /* shared site header: identical on index.html and evidence-graph.html */
   :root { --sh-bg:#fffdf6; --sh-fg:#1b1913; --sh-ink:#1b1913; --sh-accent:#c2410c; }
   @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --sh-bg:#14130f; --sh-fg:#f2ede0; --sh-ink:#000000; --sh-accent:#fb8a4c; } }
   :root[data-theme="dark"] { --sh-bg:#14130f; --sh-fg:#f2ede0; --sh-ink:#000000; --sh-accent:#fb8a4c; }
@@ -35,24 +35,26 @@ html{scroll-padding-top:70px} .toc{top:calc(env(safe-area-inset-top,0px) + 82px)
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-/* Layout: one reading column with wide figure bands; sticky section index on wide screens. Tokens follow tracetoon.ai's evidence page. */
 :root{
   --bg:#f6f7f5; --surface:#ffffff; --fg:#17201d; --muted:#5b6762; --rule:#d9dfdb;
-  --graph:#0e7c66; --graph-soft:#d6efe8; --main:#8a6d3b; --main-soft:#f0e6d3;
-  --warn:#b4472d; --warn-soft:#f6ddd5; --note:#eef2f0; --code:#eef1ee; --neutral:#9aa59f;
+  --graph:#0e7c66; --graph-soft:#d6efe8; --main:#8a6d3b; --main-soft:#f0e6d3; --cheap:#4f7fbf;
+  --warn:#b4472d; --warn-soft:#f6ddd5; --over:#9a6a00; --over-soft:#f7ebc7; --add-soft:#d6efe8; --miss-soft:#e9ecea;
+  --note:#eef2f0; --code:#eef1ee; --neutral:#9aa59f;
   --display:"Bricolage Grotesque","IBM Plex Sans",system-ui,sans-serif;
   --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
   --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
 }
 @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
   --bg:#111715; --surface:#18201d; --fg:#e4ebe7; --muted:#9aa8a1; --rule:#2c3833;
-  --graph:#3fc4a6; --graph-soft:#163a32; --main:#d2ad6e; --main-soft:#3a2f1c;
-  --warn:#ef8a6d; --warn-soft:#46231a; --note:#1c2622; --code:#1d2622; --neutral:#6d7a74; color-scheme:dark } }
+  --graph:#3fc4a6; --graph-soft:#163a32; --main:#d2ad6e; --main-soft:#3a2f1c; --cheap:#7fa9e3;
+  --warn:#ef8a6d; --warn-soft:#46231a; --over:#e6be5a; --over-soft:#3d3115; --add-soft:#163a32; --miss-soft:#252e2a;
+  --note:#1c2622; --code:#1d2622; --neutral:#6d7a74; color-scheme:dark } }
 :root[data-theme="dark"]{
   --bg:#111715; --surface:#18201d; --fg:#e4ebe7; --muted:#9aa8a1; --rule:#2c3833;
-  --graph:#3fc4a6; --graph-soft:#163a32; --main:#d2ad6e; --main-soft:#3a2f1c;
-  --warn:#ef8a6d; --warn-soft:#46231a; --note:#1c2622; --code:#1d2622; --neutral:#6d7a74; color-scheme:dark }
-body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:16px;line-height:1.6}
+  --graph:#3fc4a6; --graph-soft:#163a32; --main:#d2ad6e; --main-soft:#3a2f1c; --cheap:#7fa9e3;
+  --warn:#ef8a6d; --warn-soft:#46231a; --over:#e6be5a; --over-soft:#3d3115; --add-soft:#163a32; --miss-soft:#252e2a;
+  --note:#1c2622; --code:#1d2622; --neutral:#6d7a74; color-scheme:dark }
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:16px;line-height:1.6;margin:0}
 .wrap{max-width:1240px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:40px 80px;display:grid;grid-template-columns:190px minmax(0,1fr);gap:44px}
 @media (max-width:900px){.wrap{grid-template-columns:minmax(0,1fr);gap:0}.toc{display:none}}
 .toc{position:sticky;top:calc(env(safe-area-inset-top,0px) + 24px);align-self:start;font-size:13px;line-height:1.5}
@@ -61,28 +63,38 @@ body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:16px
 .toc .lbl{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
 main{min-width:0}
 h1,h2,h3{font-family:var(--display);text-wrap:balance;line-height:1.15;margin:0}
-h1{font-size:clamp(34px,5vw,52px);font-weight:700;letter-spacing:-.01em}
+h1{font-size:clamp(34px,5vw,50px);font-weight:700;letter-spacing:-.01em}
 h2{font-size:clamp(25px,3.2vw,32px);font-weight:700;margin-top:72px;padding-top:24px;border-top:1px solid var(--rule)}
 h3{font-size:20px;font-weight:600;margin-top:32px}
 p,li{max-width:72ch}
+.small{font-size:13.5px;color:var(--muted)}
 .kicker{font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--graph);margin-bottom:12px}
 .lede{font-size:19px;color:var(--muted);margin-top:16px}
-.meta{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:18px}
+.meta{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:14px}
 a{color:var(--graph)}
 code,.mono-s{font-family:var(--mono);font-size:.86em}
 code{background:var(--code);padding:1px 5px;border-radius:4px}
-.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px;margin-top:32px}
+.formula{display:block;font-family:var(--mono);font-size:14px;background:var(--code);border-radius:8px;padding:10px 14px;line-height:1.8;overflow-x:auto}
+.hero{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-top:28px}
+.hero .tile{padding:22px 24px}
+.hero .big{font-size:clamp(34px,4.6vw,52px)}
+.hero-sub{font-size:14px;color:var(--muted);margin-top:10px}
 .tile{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:18px 20px;display:flex;flex-direction:column;gap:6px}
 .tile .big{font-family:var(--display);font-size:40px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums;color:var(--graph)}
-.tile .sub{font-size:13px;color:var(--muted)}
+.tile .sub{font-size:14px;color:var(--fg)}
 .tile .prov{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+table.summary td:first-child{color:var(--muted)}
 figure{margin:28px 0 0;background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:20px 20px 14px}
+figure.comic{padding:0;overflow:hidden}
 figcaption{font-size:13px;color:var(--muted);margin-top:10px;max-width:none}
+.comic figcaption{padding:0 16px 12px}
 .fig-title{font-weight:600;font-size:15px;margin-bottom:6px}
 .chart{width:100%;overflow-x:auto}
 .chart svg{display:block;max-width:100%;height:auto;min-width:520px}
-.zooms{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
-.zooms svg{min-width:0}
+.zooms{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.zooms svg{display:block;max-width:100%;height:auto}
+.legend{display:flex;flex-wrap:wrap;gap:16px;font-size:13px;color:var(--muted);margin-top:6px}
+.legend span::before{content:"";display:inline-block;width:11px;height:11px;border-radius:2px;margin-right:6px;vertical-align:-1px;background:var(--c)}
 .tbl{overflow-x:auto;margin-top:20px}
 table{border-collapse:collapse;width:100%;font-size:14px;font-variant-numeric:tabular-nums}
 th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--rule);vertical-align:top}
@@ -93,83 +105,419 @@ td.worse{color:var(--warn);font-weight:600}
 .callout{margin-top:24px;background:var(--note);border-left:3px solid var(--graph);border-radius:0 8px 8px 0;padding:14px 18px}
 .callout.w{border-left-color:var(--warn)}
 .callout p{margin:6px 0;font-size:15px}
-.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px;margin-top:20px}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;margin-top:20px}
 .two>div{min-width:0}
 .card{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:16px 20px}
 .card h4{margin:0 0 8px;font-family:var(--display);font-size:17px}
+.card.g{border-top:3px solid var(--graph)} .card.m{border-top:3px solid var(--main)}
 .card ul,.card ol{padding-left:20px;margin:6px 0} .card li{margin:4px 0;font-size:15px}
-.ex{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:20px;align-items:start}
+pre.cypher{background:var(--code);border:1px solid var(--rule);border-radius:10px;padding:14px 16px;overflow-x:auto;margin-top:14px;font-family:var(--mono);font-size:13px;line-height:1.55;white-space:pre}
 .ex3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:20px;align-items:start}
 @media (max-width:1100px){.ex3{grid-template-columns:minmax(0,1fr)}}
-mark{color:inherit;border-radius:3px;padding:0 2px} mark.err{background:var(--warn-soft);box-shadow:inset 0 -2px 0 var(--warn)} mark.over{background:var(--main-soft);box-shadow:inset 0 -2px 0 var(--main)}
+mark{color:inherit;border-radius:3px;padding:0 2px}
+mark.err{background:var(--warn-soft);box-shadow:inset 0 -2px 0 var(--warn)}
+mark.over{background:var(--over-soft);box-shadow:inset 0 -2px 0 var(--over)}
+mark.add{background:var(--add-soft);box-shadow:inset 0 -2px 0 var(--graph)}
 .keys{display:flex;flex-wrap:wrap;gap:14px;font-size:13px;margin-top:12px}
-.ann{margin:10px 0 0;font-size:12.5px;line-height:1.45;padding:7px 10px;border-radius:6px} .ann.miss{background:var(--note)} .ann.add{background:var(--graph-soft)}
-.comic{padding:0;overflow:hidden}
-.pr-head .who.n{color:var(--muted)}
-@media (max-width:1000px){.ex{grid-template-columns:minmax(0,1fr)}}
+.ann{margin:6px 0 10px;font-size:12.5px;line-height:1.45;padding:6px 9px;border-radius:6px;color:var(--fg)}
+.ann.err{background:var(--warn-soft)} .ann.err b{color:var(--warn)}
+.ann.add{background:var(--add-soft)} .ann.add b{color:var(--graph)}
+.ann.miss{background:var(--miss-soft)} .ann.miss b{color:var(--muted)}
 .pr{background:var(--surface);border:1px solid var(--rule);border-radius:10px;min-width:0}
 .pr-head{padding:14px 16px;border-bottom:1px solid var(--rule)}
 .pr-head .who{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase}
-.pr-head .who.m{color:var(--main)} .pr-head .who.g{color:var(--graph)}
+.pr-head .who.n{color:var(--muted)} .pr-head .who.m{color:var(--main)} .pr-head .who.g{color:var(--graph)}
 .pr-head .ttl{font-weight:600;font-size:15px;margin-top:4px;line-height:1.35}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .chip{font-family:var(--mono);font-size:11px;padding:2px 7px;border-radius:999px;background:var(--note);color:var(--fg)}
-.chip.bad{background:var(--warn-soft);color:var(--warn)} .chip.good{background:var(--graph-soft);color:var(--graph)}
+.chip.bad{background:var(--warn-soft);color:var(--warn)} .chip.good{background:var(--add-soft);color:var(--graph)}
 .pr-body{padding:12px 16px 16px;font-size:13.5px;line-height:1.55;overflow-wrap:anywhere}
-.pr-body h5{font-size:13px;margin:12px 0 4px} .pr-body p{margin:6px 0} .pr-body ul{padding-left:18px;margin:6px 0}
+.pr-body h5{font-size:13px;margin:12px 0 4px} .pr-body p{margin:6px 0} .pr-body ul{padding-left:18px;margin:6px 0} .pr-body li{margin:3px 0}
 details{margin-top:16px} summary{cursor:pointer;font-weight:600}
 svg text{fill:var(--fg);font-family:var(--body)}
 svg .muted{fill:var(--muted)} svg .mono{font-family:var(--mono)}
 svg .axis{stroke:var(--rule);stroke-width:1} svg .axis.strong{stroke:var(--muted);stroke-dasharray:3 3}
 svg .ci{stroke:var(--muted);stroke-width:2;stroke-linecap:round}
 svg .dot-g{fill:var(--graph)} svg .dot-n{fill:var(--neutral)} svg .dot-m{fill:var(--main)}
-svg .bar-g{fill:var(--graph)} svg .bar-m{fill:var(--main)}
+svg .bar-g{fill:var(--graph)} svg .bar-m{fill:var(--main)} svg .bar-w{fill:var(--warn)}
 svg .g-text{fill:var(--graph)} svg .m-text{fill:var(--main)}
 svg .break{stroke:var(--muted);fill:none;stroke-width:1.5}
 svg .arrow{stroke:var(--muted);fill:none;stroke-width:1.5}
 svg .box-n{fill:var(--note);stroke:var(--rule)} svg .box-g{fill:var(--graph-soft);stroke:var(--graph)} svg .box-m{fill:var(--main-soft);stroke:var(--main)}
 :focus-visible{outline:2px solid var(--graph);outline-offset:2px}
-@media (prefers-reduced-motion: reduce){*{scroll-behavior:auto}}
 </style>
 
 <div class="wrap">
 <nav class="toc" aria-label="Sections">
   <div class="lbl">Contents</div>
-  <a href="#result">The result</a>
-  <a href="#tracetoon">What Tracetoon does</a>
-  <a href="#graph">What the graph changes</a>
-  <a href="#quality">Quality</a>
-  <a href="#cost">Cost</a>
-  <a href="#example">One PR, two ways</a>
-  <a href="#cases">Every case</a>
-  <a href="#method">How we tested</a>
-  <a href="#disclosures">Run details and disclosures</a>
-  <a href="#appendix">Appendix: data</a>
+  <a href="#result">The result</a><a href="#tracetoon">What Tracetoon is</a><a href="#example">One PR, three ways</a><a href="#judging">How quality is judged</a><a href="#quality">Where quality comes from</a><a href="#cost">Token cost</a><a href="#nograph">Tracetoon without a graph</a><a href="#graph">What the graph does</a><a href="#relate">Why Relate</a><a href="#journey">How we got here</a><a href="#cases">Per-case results</a><a href="#caveats">Method and caveats</a><a href="#appendix">Appendix: data</a>
 </nav>
 <main>
 <header id="result">
   <div class="kicker">Tracetoon · evidence graph results · 61 real pull requests · November 2026</div>
   <h1>An embedded Relate graph made our PR writer better and cheaper</h1>
-  <p class="lede">Tracetoon writes pull-request descriptions from the session logs your AI coding agent already keeps. Its evidence graph, built per PR in the embedded Relate database, gives the writing model a compact, cited brief instead of raw logs. Compared with Tracetoon's original multi-agent workflow on 61 real pull requests, judges preferred the graph-written description 83 to 34 on Codex and 69 to 17 on Claude Code, while it cost 46% and 31% less per PR.</p>
-  <div class="tiles">
-    <div class="tile"><span class="prov">Codex · judges' pick</span><span class="big">71%</span><span class="sub">of decided head-to-heads went to the graph PR (83 vs 34; 95% interval 61%–80%)</span></div>
-    <div class="tile"><span class="prov">Codex · cost per PR</span><span class="big">−46%</span><span class="sub">typical saving per PR; average $0.225 vs $0.447 for the original workflow</span></div>
-    <div class="tile"><span class="prov">Codex · key facts conveyed</span><span class="big">82%</span><span class="sub">of the expert fact sheet's claims, vs 72% for the original</span></div>
-    <div class="tile"><span class="prov">Claude Code · judges' pick</span><span class="big">80%</span><span class="sub">of decided head-to-heads went to the graph PR (69 vs 17; 95% interval 71%–88%)</span></div>
-    <div class="tile"><span class="prov">Claude Code · cost per PR</span><span class="big">−31%</span><span class="sub">typical saving per PR; average $0.415 vs $0.654</span></div>
+  <div class="hero">
+    <div class="tile"><span class="prov">Judges' pick</span><span class="big">Preferred 68% of the time</span></div>
+    <div class="tile"><span class="prov">Cost per PR</span><span class="big">70% lower cost</span></div>
   </div>
-  <p class="meta">61 real PRs from 12 repositories · each written 3 times by each workflow · 2 judges per provider, both orders · 732 judgments per provider · factual errors checked by two expert models · prbench</p>
-  <figure class="comic"><img src="img/comic-cost.webp" alt="Two-panel comic. Left, labeled Without the graph: three tired robots hunch over an enormous unrolled scroll labeled session logs, saying Re-reading it. Again. Right, labeled With the graph: one small robot holds up a folded map labeled evidence graph while two tiny drones with magnifying glasses, labeled reviewers, check it; the robot says Done. Two checks. Half the tokens." style="display:block;width:100%;height:auto;border-radius:6px"></figure>
+  <p class="hero-sub">in blind head-to-head judging against Tracetoon's original workflow, 61 real PRs (Codex)</p>
+  <div class="tbl"><table class="summary"><thead><tr><th></th><th>Codex (GPT-6.1 Terra)</th><th>Claude Code (Sonnet 5.5)</th></tr></thead><tbody><tr><td>Preferred by both judges (wins–losses)</td><td>79–38 (68%, 95% CI 56%–79%)</td><td>60–21 (74%, 95% CI 62%–85%)</td></tr><tr><td>Score difference (0–100, 95% CI)</td><td>+3.3 [+1.0, +5.5]</td><td>+3.5 [+0.8, +6.1]</td></tr><tr><td>Cost per PR, graph vs original</td><td>70% lower (paired ratio 0.30, 95% CI 0.28–0.32); $0.128 vs $0.447 average</td><td>43% lower (paired ratio 0.57, 95% CI 0.53–0.62); $0.344 vs $0.654 average</td></tr><tr><td>Key facts conveyed</td><td>82% vs 72%</td><td>73% vs 77%</td></tr></tbody></table></div>
+  <p class="meta">61 real PRs from 12 repositories · each written 3 times by each workflow · 2 judges per provider, both orders · factual errors checked by two expert models · prbench</p>
+  <figure class="comic"><img src="img/comic-cost.webp" alt="Two-panel comic. Left, labeled Without the graph: three tired robots hunch over an enormous unrolled scroll labeled session logs, saying Re-reading it. Again. Right, labeled With the graph: one small robot holds up a folded map labeled evidence graph while two tiny drones with magnifying glasses, labeled reviewers, check it; the robot says Done. Two checks. Half the tokens." style="display:block;width:100%;height:auto">
+  <figcaption>Drawn by Tracetoon's own comic step, the same way it can add a comic to a PR.</figcaption></figure>
+  <p style="margin-top:22px">Compared with Tracetoon's original multi-agent workflow on 61 real pull requests, when both judges agreed they preferred the graph-written description 79 to 38 on Codex and 60 to 21 on Claude Code, at 70% and 43% lower cost per PR. The graph did not let us use a weaker writer. It let the same model write a description reviewers would rather receive while spending fewer tokens, because a deterministic graph does the structural work the model used to redo on every PR. The gains are smaller than in our earlier 5-PR report (+3.5 and +5.2 points then, +3.3 and +3.5 now), and they are not free of trade-offs: on Codex the graph drafts carry more expert-confirmed factual errors than the original, which fails our own strict accuracy gate (<a href="#accuracy">details below</a>); on Claude Code they state fewer of the open uncertainties, and convey slightly fewer key facts. The rest of this page shows one PR written three ways, explains how the judges score, where the gain comes from, what the graph does, and what we disclose.</p>
 </header>
 
-<h2 id="tracetoon">What Tracetoon does</h2>
-<p>AI coding agents such as Claude Code and Codex keep session logs on disk: the requests you typed, the plans they made, every file edit and every command they ran. A pull-request description written from the diff alone loses most of that. It can't say why the change was made, what was tried first, or which tests ran on the final code.</p>
-<p>Tracetoon is an open-source agent skill that writes the description from that record. When your agent is about to open a PR, Tracetoon finds the sessions that produced the branch, pulls a redacted evidence set from them (private paths and secrets removed), and has the agent draft from it. It then checks the draft: every factual sentence has to trace back to evidence, and the Validation section is generated from recorded test and build runs rather than typed by the model. You approve the result before anything is posted.</p>
+<section>
+<h2 id="tracetoon">What Tracetoon is</h2>
+<p><a href="https://github.com/Tracetoon/tracetoon">Tracetoon</a> is an open-source tool that writes better pull-request descriptions from the work an AI coding agent already did. Agents such as Claude Code, Codex, Copilot and Cursor keep session logs on disk: the user's requests, plans, decisions, file edits and the commands they ran. A PR description written from the diff alone loses most of that. It can't say why the change was made, what was tried first, or which tests actually ran on the final code. Tracetoon runs as an agent skill, and when an agent is about to open a PR it takes over in five steps:</p>
+<ol>
+  <li><b>Finds the matching sessions</b> by matching agent edits to lines in the diff, and asks when a session is ambiguous.</li>
+  <li><b>Builds a redacted evidence set</b> of prompts, plans, edits, runs and commits, with private paths and secrets removed.</li>
+  <li><b>Writes the description</b> from that evidence and checks it: every factual sentence must trace back to evidence, and the Validation section is generated from recorded test and build runs, not typed by the model.</li>
+  <li><b>Draws an optional comic</b> of the change, left out where a repo's rules forbid images or when you turn comics off.</li>
+  <li><b>Creates the PR</b> after review, then reports the link, whether a comic is included and any sessions it left out.</li>
+</ol>
+<p>This page compares two versions of its drafting step: the original multi-agent workflow and the version built on an evidence graph.</p>
+</section>
 
-<h2 id="graph">What the evidence graph changes</h2>
-<p>Tracetoon's original workflow was already careful. Separate agents research the repository's rules, draft the description from a digest of the logs, and independently review every claim, so no agent checks its own work. That is accurate but expensive: an expensive model has to rediscover the structure of the change from text, working out which commit sentence describes which hunk, which functions are new and why the change was made, and then a second instance does it all again to check the first.</p>
-<p>The evidence graph moves that rediscovery out of the model. One command reads the session logs and git, builds a small graph in <a href="https://github.com/relatedb/relate">Relate</a> (an embedded graph database written in Rust, shipped inside Tracetoon's CLI as WebAssembly), runs a fixed set of Cypher queries, and prints a compact brief. No model is involved, so this step costs no tokens. The writer gets short tables it can cite (which request led to which code, which function owns each behavior, which test ran after the last edit) instead of rereading everything.</p>
-<figure><div class="fig-title">From agent logs to a cited PR description</div><div class="chart"><svg viewBox="0 0 760 210" role="img" aria-label="Pipeline: session logs and git feed an embedded Relate graph; fixed Cypher queries produce a brief; the writing model drafts from the brief; Tracetoon checks and renders the PR">
+<section>
+<h2 id="example">One PR, three ways</h2>
+<p><b>What the PR does.</b> This prbench PR adds a <code>compare --systems</code> option, so a benchmark run can skip the provider's native writer and judge only the graph workflow against the original one. It also adds a cross-model composite score difference, with a case-clustered 95% interval, to the accuracy report.</p>
+<p>The same change is described three ways, all written by Codex (GPT-6.1 Terra) and scored by the same two judges against the same fact sheet: the agent opening the PR on its own, Tracetoon's original multi-agent workflow, and Tracetoon with the evidence graph. <b>How we chose it:</b> this three-way run covered one public PR, <code>prbench-compare-systems</code>, fixed before the run because it was the worked example in our previous report. Its graph-minus-original gap on Codex here is +18.7, well above the 61-PR average (+3.3), so it shows what the graph adds when it works well, not a typical PR. Scores come from one draft per version: four judgments each for the agent-alone and original drafts, and eight for the graph draft, which was judged against both.</p>
+<div class="keys"><span><mark class="err">contradicted by the evidence</mark></span><span><mark class="over">overstated, vague or unverifiable</mark></span><span><mark class="add">detail the other versions miss</mark></span></div>
+<div class="ex3"><article class="pr"><div class="pr-head"><div class="who n">Agent opens the PR itself · no Tracetoon</div><div class="ttl">Support selecting comparison systems</div>
+<div class="chips"><span class="chip">score 33.8</span><span class="chip bad">1 contradicted claim</span><span class="chip">key facts 4 of 8</span><span class="chip">context 0 of 4</span><span class="chip">50 words</span><span class="chip">est. $0.09 cached / $0.36 not cached<sup>*</sup></span></div></div><div class="pr-body"><h5>Summary</h5>
+<ul><li>Add <code>compare --systems</code> to select writer systems, allowing baseline and candidate comparisons without a native writer; preserve the selection when resuming and rebuilding experiments.</li><li><mark class="over">Show cross-model composite score deltas and bootstrap intervals in accuracy reports.</mark></li></ul><div class="ann miss"><b>Vague and missing.</b> The second bullet doesn&#x27;t say that the delta is the graph minus the original over per-case means, or that the interval is clustered by case. The description never gives a reason for the change: it conveys none of the four context items, including the cost motivation. It doesn&#x27;t say that baseline and candidate are required while native is optional, describes none of the new tests, and gives no place to start reviewing. Judges scored rationale and entry point 0 in all four judgments.</div>
+<h5>Validation</h5>
+<ul><li><code>bun run typecheck</code> passed.</li><li><mark class="err"><code>bun run test</code> running.</mark></li><li><code>git diff --check origin/main...HEAD</code> passed.</li></ul><div class="ann err"><b>Contradicted (3 of 4 judgments).</b> The test suite was still running when the agent opened the PR. The recorded run then finished with 240 passes, 1 skip and 3 failures, and the agent&#x27;s attempt to update the description failed, so the published PR still says the tests are running.</div></div></article><article class="pr"><div class="pr-head"><div class="who m">Tracetoon, original workflow</div><div class="ttl">Add compare system selection and composite score deltas</div>
+<div class="chips"><span class="chip">score 72.3</span><span class="chip good">0 contradicted claims</span><span class="chip">key facts 6 of 8</span><span class="chip">context 0 of 4</span><span class="chip">176 words</span><span class="chip">$0.50</span></div></div><div class="pr-body"><p><code>compare</code> previously ran all three provider systems and judged the candidate against both baseline and native. The new <code>--systems</code> option can omit native while retaining the baseline and candidate writers; in that case only candidate versus baseline is judged, in both orders. It accepts short and full system names, defaults to all three, and requires baseline and candidate.</p><div class="ann miss"><b>Missing: the why.</b> It never says why the option exists. The user&#x27;s request to prune the test matrix and cut cost, and the plan&#x27;s reasons for skipping native, are absent (X1–X3), and judges scored rationale 0 in all four judgments. It also doesn&#x27;t spell out the new --plan output fields.</div>
+<p>Planning, execution, rebuilt coverage and the quality gate follow the selected systems. Subsets are frozen in the manifest and experiment identity; all-three runs retain the prior identity, and a resume without <code>--systems</code> uses the frozen selection.</p>
+<p>The accuracy view also adds a composite-score delta to its cross-model candidate-versus-baseline table, with a 95% bootstrap interval over shared cases using per-case means.</p>
+<p>Start review with system selection in <code>src/run/provider.ts</code> and its use in <code>src/comparison.ts</code>; the comparison and score tests exercise the subset and composite contrast.</p><div class="ann miss"><b>Thin on tests.</b> The tests are summed up as exercising &quot;the subset and composite contrast&quot;. Only one of four judgments credited each of the two test facts (C7, C8).</div>
+<p>Local validation: <code>bun run typecheck</code> passed. <mark class="add"><code>bun run test</code> failed (242 passed, 1 skipped, 1 failed): <code>createSandbox &gt; captures PRs through a fake gh and sends pushes to a local remote</code> timed out after 30 seconds.</mark></p><div class="ann add"><b>A precise failure report.</b> It names the failing test and the cause, a 30-second timeout in a sandbox test. Judges called it an honest account of the local failure. The graph version&#x27;s own test run passed, so it had no failure to report.</div></div></article><article class="pr"><div class="pr-head"><div class="who g">Tracetoon with the evidence graph</div><div class="ttl">Select comparison systems and report composite deltas</div>
+<div class="chips"><span class="chip">score 90.9</span><span class="chip good">0 contradicted claims</span><span class="chip">key facts 8 of 8</span><span class="chip">context 2 of 4</span><span class="chip">245 words</span><span class="chip">$0.19</span></div></div><div class="pr-body"><p><mark class="add">Comparing graph quality and cost across models calls for a smaller test matrix and a composite score comparison.</mark> This change lets a comparison omit the native writer and reports the composite delta across candidate and baseline model arms.</p><div class="ann add"><b>Added: the why.</b> Only this version says why the change was made: a smaller test matrix to cut cost, and a composite comparison across models. All eight judgments credited the user&#x27;s request (X1) and seven credited the plan&#x27;s reasoning (X2); neither of the other versions conveys either.</div>
+<p>Previously, comparisons planned and rebuilt judgments against both the baseline and the provider&#x27;s native system. <code>compare --systems</code> now accepts <code>native</code>, <code>baseline</code>, and <code>candidate</code>, their full names, or the provider&#x27;s native name; it defaults to all three and requires baseline and candidate. Writers follow the selected systems; when native is omitted, candidate is judged against baseline in both orders. Planned counts, rebuild coverage, and quality gates reflect the selection, and <mark class="add">plan output includes <code>systems</code> and <code>judgedAgainst</code></mark>. A subset is stored in manifest settings and experiment identity, while all three retain the previous identity; resuming without <code>--systems</code> uses the frozen selection.</p><div class="ann add"><b>Added: the exact plan fields.</b> The new --plan fields are part of fact C4. The original says planning follows the selected systems but never names the fields, which one judge listed as an omission; judges noted the named fields here.</div><div class="ann miss"><b>Missing: two rules.</b> It doesn&#x27;t say that resuming with a different selection fails as changed inputs (part of C5), or that unknown names are rejected (part of C2). Five of eight judgments noted the missing resume rule.</div>
+<p>For candidate and baseline arms with shared cases, the accuracy table now includes candidate-minus-baseline composite delta and a 95% bootstrap interval over per-case means. <mark class="add"><code>tests/comparison.test.ts</code> covers frozen three-system runs, matching-artifact resumes, and planning and resuming without native; <code>tests/score.test.ts</code> checks the case-clustered interval.</mark> <mark class="add">The comparison tests use a fake setup rather than the real comparison setup.</mark></p><div class="ann add"><b>Added: which tests cover what.</b> Seven of eight judgments credited the comparison-test fact (C7), against one of four for the original. The numeric expectations (60 writers and 120 orders without native) are still left out.</div><div class="ann add"><b>Added: an honest test limit.</b> The new tests run on fake fixtures, and no real benchmark ran with --systems (fact sheet U2). Judges credited it for stating the fake-test limits.</div>
+<h5>Validation</h5>
+<ul><li>Checks passed on the submitted content: <mark class="over"><code>bun run test</code> (243 pass, 0 fail, Ran 244 tests across 34 files. [828.16s])</mark>, <code>bun run typecheck</code>.</li></ul><div class="ann miss"><b>Raw, not wrong.</b> Judges confirmed this fresh pass from the execution records. But the runner&#x27;s own line is pasted as is, and 243 passes and 0 failures don&#x27;t account for the 244th test, which was skipped.</div>
+<p>Where to start: <code>compareV2</code> in <code>src/comparison.ts</code>, <mark class="add">including how resume retains frozen systems</mark>.</p><div class="ann add"><b>Added: a precise entry point.</b> It points at compareV2 and at how resume keeps the frozen systems. All eight judgments scored the entry point 2 of 2, and the feedback question that follows scored 2 as well.</div>
+<p>Feedback wanted: Does requiring both baseline and candidate while making native optional fit the intended comparison workflow?</p></div></article></div>
+<p style="margin-top:16px">The agent alone makes one mistake, and it is a costly one: the description says the tests are still running, but they finished with failures. It also gives no reason for the change and no starting point for review, which is why it scores 33.8. Tracetoon's original workflow is accurate and compact and reports its failed test run precisely, but it leaves out why the work was done and says little about the tests (72.3, at $0.50). The graph version is just as accurate. It adds the motivation, the exact plan fields, which tests cover what, an honest limit on fake-setup tests, a precise entry point and a feedback question, and scores 90.9 at $0.19. Its soft spots are one missing resume rule and a raw test-runner line.</p>
+<p class="small"><sup>*</sup> The agent that does the work would open the PR in its own session, carrying that session's whole context into every call. This PR's session ended at about 286K tokens of context. The estimate follows <a href="#mainsession">the method in Token cost</a> at Terra list prices. The draft shown was written by a fresh Codex agent in the benchmark sandbox, which measured $0.11 but never read the session logs. The other two costs are measured. Key facts and context count fact-sheet items that at least half of a draft's judgments credited. Highlighted text is verbatim; the notes are ours, written from the judges&#x27; clause-by-clause assessments, notes, rubric scores and coverage ids, and the case&#x27;s fact sheet. Generated footers are left out. A trap on this case's fact sheet: “Claiming native vs baseline is now judged, or that all pairs of selected systems are judged.” None of the three drafts hit a trap.</p>
+</section>
+
+<section>
+<h2 id="judging">How quality is judged</h2>
+<p>Each of the 61 PRs is a real change with the original agent session logs that produced it. Every description is judged against an expert-reviewed fact sheet, by two judges, in both orders.</p>
+<h3>The fact sheet</h3>
+<div class="tbl"><table><thead><tr><th>List</th><th>What it holds</th><th class="n">Items per case</th><th>Scored as</th></tr></thead><tbody>
+<tr><td><b>Claims</b> (C1…)</td><td>Facts about the change a good description should convey: new behaviors, changed defaults, tests added.</td><td class="n">4–16</td><td>Claim coverage</td></tr>
+<tr><td><b>Context</b> (X1…)</td><td>What a reviewer would want beyond the code: why the work started, what the user asked for, what was found along the way.</td><td class="n">2–6</td><td>Context coverage</td></tr>
+<tr><td><b>Uncertainties</b> (U1…)</td><td>What the evidence does <i>not</i> establish, such as a path never run live. A good description doesn't overclaim these.</td><td class="n">2–7</td><td>Uncertainties respected</td></tr>
+<tr><td><b>Traps</b> (T1…)</td><td>Plausible but wrong statements a writer might make, such as calling an existing function new.</td><td class="n">4–8</td><td>Traps hit (penalty)</td></tr>
+</tbody></table></div>
+<p>Sheets were drafted from the diff and logs, then reviewed by a six-model expert panel (three Claude Opus 5.5, three GPT-6.1 Sol); disputes were settled by mirrored debates judged by Fable 5.1 and GPT-6 Astra, with Fable deciding splits.</p>
+<h3>Pairwise judging, both orders, two judges</h3>
+<p>A judge sees the fact sheet, the commits, the diff, the session evidence, any fresh validation runs, and two descriptions labeled A and B. It marks every checkable clause <i>supported</i>, <i>contradicted</i>, <i>unsupported</i> (broader than the evidence) or <i>unverifiable</i>, scores ten reviewer-usefulness items, and says which description a maintainer would rather receive, with accuracy first, then usefulness, then the reader's effort. Codex runs use GPT-6.1 Sol and GPT-6.1 Terra as judges; Claude Code runs use Opus 5.5 and Sonnet 5.5. Each judge reads every pair in both orders. A judge's pick counts only when it is the same in both orders. Our headline <b>"both judges agree"</b> record counts the comparisons where both judges made the same order-stable pick; anything else is a tie. That is why the counts are well below the 183 pairs per provider.</p>
+<h3>The ten rubric items</h3>
+<div class="tbl"><table><thead><tr><th>Item</th><th>What the judge checks</th></tr></thead><tbody>
+<tr><td>problem</td><td>The trigger, the old behavior and the new behavior are clear, and the old behavior matches the base code.</td></tr><tr><td>rationale</td><td>Reasons for the approach are explicit and correctly attributed.</td></tr><tr><td>validation</td><td>What was checked, and how, is stated; claims are bound to evidence and limits are honest.</td></tr><tr><td>consequences</td><td>Concrete effects on users, callers or operations are stated.</td></tr><tr><td>orientation</td><td>Changes are grouped by idea in a sensible reading order, not narrated file by file.</td></tr><tr><td>entry</td><td>A reviewer knows where to start.</td></tr><tr><td>economy</td><td>Easy to find what matters; inventories and padding count against.</td></tr><tr><td>feedback</td><td>Says what kind of review or feedback is wanted, if any.</td></tr><tr><td>links</td><td>Links to related issues, PRs or docs where they exist.</td></tr><tr><td>scope</td><td>What the text says the PR covers matches the files and behavior actually changed.</td></tr>
+</tbody></table></div>
+<p>Each item is scored 0 (missing or misleading), 1 (partial) or 2 (sufficient and accurate), or left null when it doesn't apply.</p>
+<h3>The composite score</h3>
+<p>The composite rolls each judgment into one 0–100 number per draft, averaged over its judgments:</p>
+<p class="formula">composite = 35·claims + 15·context + 15·uncertainties + 35·rubric − 15·errors − 7·unsupported − 10·traps</p>
+<p>Coverage terms are fractions of the fact sheet (0–1). Rubric is the mean item score divided by 2. Errors, unsupported claims and traps are counts per judgment, so a single contradicted claim costs 15 points. The head-to-head record and the composite are reported separately because they can disagree: the composite rewards coverage, while the head-to-head reflects which draft a maintainer would rather get. Factual errors are also <b>checked by experts</b>: every error a judge flagged was re-checked against the evidence by Fable 5.1 and GPT-6 Astra (434 flags, none left unresolved).</p>
+</section>
+
+<section>
+<h2 id="quality">Where the quality gain comes from</h2>
+<figure><div class="fig-title">How often judges picked the graph-written PR</div>
+<div class="chart"><svg viewBox="0 0 760 294" role="img" aria-label="Share of decided head-to-head comparisons won by the graph PR, per judge, with 95% case-clustered intervals">
+<line class="axis" x1="250.0" y1="22" x2="250.0" y2="272"/>
+<text x="250.0" y="14" text-anchor="middle" class="muted mono" font-size="11">30%</text>
+<line class="axis" x1="310.9" y1="22" x2="310.9" y2="272"/>
+<text x="310.9" y="14" text-anchor="middle" class="muted mono" font-size="11">40%</text>
+<line class="axis strong" x1="371.8" y1="22" x2="371.8" y2="272"/>
+<text x="371.8" y="14" text-anchor="middle" class="muted mono" font-size="11">50%</text>
+<line class="axis" x1="432.8" y1="22" x2="432.8" y2="272"/>
+<text x="432.8" y="14" text-anchor="middle" class="muted mono" font-size="11">60%</text>
+<line class="axis" x1="493.7" y1="22" x2="493.7" y2="272"/>
+<text x="493.7" y="14" text-anchor="middle" class="muted mono" font-size="11">70%</text>
+<line class="axis" x1="554.6" y1="22" x2="554.6" y2="272"/>
+<text x="554.6" y="14" text-anchor="middle" class="muted mono" font-size="11">80%</text>
+<line class="axis" x1="615.5" y1="22" x2="615.5" y2="272"/>
+<text x="615.5" y="14" text-anchor="middle" class="muted mono" font-size="11">90%</text>
+<text x="375.8" y="286" class="muted" font-size="11">even split</text>
+<text x="238" y="54.0" text-anchor="end" font-size="13" font-weight="600">Codex · both judges agree</text>
+<line x1="408.4" y1="50.0" x2="545.5" y2="50.0" class="ci"/>
+<circle cx="478.5" cy="50.0" r="7" class="dot-g"/>
+<text x="553.5" y="54.0" font-size="12" class="mono">68% · 79–38</text>
+<text x="238" y="94.0" text-anchor="end" font-size="13" class="muted">Codex · GPT-6.1 Sol judge</text>
+<line x1="389.5" y1="90.0" x2="521.1" y2="90.0" class="ci"/>
+<circle cx="457.7" cy="90.0" r="5.5" class="dot-g"/>
+<text x="529.1" y="94.0" font-size="12" class="mono">64% · 91–51</text>
+<text x="238" y="134.0" text-anchor="end" font-size="13" class="muted">Codex · GPT-6.1 Terra judge</text>
+<line x1="430.9" y1="130.0" x2="542.4" y2="130.0" class="ci"/>
+<circle cx="488.2" cy="130.0" r="5.5" class="dot-g"/>
+<text x="550.4" y="134.0" font-size="12" class="mono">69% · 105–47</text>
+<text x="238" y="174.0" text-anchor="end" font-size="13" font-weight="600">Claude Code · both judges agree</text>
+<line x1="441.9" y1="170.0" x2="583.2" y2="170.0" class="ci"/>
+<circle cx="518.7" cy="170.0" r="7" class="dot-g"/>
+<text x="591.2" y="174.0" font-size="12" class="mono">74% · 60–21</text>
+<text x="238" y="214.0" text-anchor="end" font-size="13" class="muted">Claude Code · Opus 5.5 judge</text>
+<line x1="421.2" y1="210.0" x2="527.2" y2="210.0" class="ci"/>
+<circle cx="476.0" cy="210.0" r="5.5" class="dot-g"/>
+<text x="535.2" y="214.0" font-size="12" class="mono">67% · 106–52</text>
+<text x="238" y="254.0" text-anchor="end" font-size="13" class="muted">Claude Code · Sonnet 5.5 judge</text>
+<line x1="434.0" y1="250.0" x2="569.8" y2="250.0" class="ci"/>
+<circle cx="503.4" cy="250.0" r="5.5" class="dot-g"/>
+<text x="577.8" y="254.0" font-size="12" class="mono">72% · 68–27</text>
+</svg></div>
+<figcaption>Share of decided head-to-heads won by the graph PR (ties excluded), with 95% intervals bootstrapped over the 61 cases. A green dot means the whole interval is above an even split.</figcaption></figure>
+<figure><div class="zooms">
+<svg viewBox="0 0 380 168" role="img" aria-label="Codex composite score: original 72.0, graph 75.3; axis starts at 68">
+<line class="axis" x1="120.0" y1="30" x2="120.0" y2="118"/>
+<text x="120.0" y="134" text-anchor="middle" class="muted mono" font-size="11">68</text>
+<line class="axis" x1="166.0" y1="30" x2="166.0" y2="118"/>
+<text x="166.0" y="134" text-anchor="middle" class="muted mono" font-size="11">70</text>
+<line class="axis" x1="212.0" y1="30" x2="212.0" y2="118"/>
+<text x="212.0" y="134" text-anchor="middle" class="muted mono" font-size="11">72</text>
+<line class="axis" x1="258.0" y1="30" x2="258.0" y2="118"/>
+<text x="258.0" y="134" text-anchor="middle" class="muted mono" font-size="11">74</text>
+<line class="axis" x1="304.0" y1="30" x2="304.0" y2="118"/>
+<text x="304.0" y="134" text-anchor="middle" class="muted mono" font-size="11">76</text>
+<line class="axis" x1="350.0" y1="30" x2="350.0" y2="118"/>
+<text x="350.0" y="134" text-anchor="middle" class="muted mono" font-size="11">78</text>
+<path d="M114 122 l6 -8 l6 8" class="break"/><path d="M114 128 l6 -8 l6 8" class="break"/>
+<text x="108" y="58" text-anchor="end" font-size="13">Original</text>
+<rect x="120" y="42" width="91.3" height="24" rx="3" class="bar-m"/>
+<text x="217.3" y="58" font-size="13" class="mono" font-weight="600">72.0</text>
+<text x="108" y="98" text-anchor="end" font-size="13">Graph</text>
+<rect x="120" y="82" width="167.2" height="24" rx="3" class="bar-g"/>
+<text x="293.2" y="98" font-size="13" class="mono" font-weight="600">75.3</text>
+<text x="120" y="156" font-size="11" class="muted">axis starts at 68 · difference +3.3 [+1.0, +5.5]</text>
+<text x="120" y="16" font-size="13" font-weight="600">Codex composite score</text>
+</svg>
+<svg viewBox="0 0 380 168" role="img" aria-label="Claude Code composite score: original 59.8, graph 63.2; axis starts at 56">
+<line class="axis" x1="120.0" y1="30" x2="120.0" y2="118"/>
+<text x="120.0" y="134" text-anchor="middle" class="muted mono" font-size="11">56</text>
+<line class="axis" x1="166.0" y1="30" x2="166.0" y2="118"/>
+<text x="166.0" y="134" text-anchor="middle" class="muted mono" font-size="11">58</text>
+<line class="axis" x1="212.0" y1="30" x2="212.0" y2="118"/>
+<text x="212.0" y="134" text-anchor="middle" class="muted mono" font-size="11">60</text>
+<line class="axis" x1="258.0" y1="30" x2="258.0" y2="118"/>
+<text x="258.0" y="134" text-anchor="middle" class="muted mono" font-size="11">62</text>
+<line class="axis" x1="304.0" y1="30" x2="304.0" y2="118"/>
+<text x="304.0" y="134" text-anchor="middle" class="muted mono" font-size="11">64</text>
+<line class="axis" x1="350.0" y1="30" x2="350.0" y2="118"/>
+<text x="350.0" y="134" text-anchor="middle" class="muted mono" font-size="11">66</text>
+<path d="M114 122 l6 -8 l6 8" class="break"/><path d="M114 128 l6 -8 l6 8" class="break"/>
+<text x="108" y="58" text-anchor="end" font-size="13">Original</text>
+<rect x="120" y="42" width="86.9" height="24" rx="3" class="bar-m"/>
+<text x="212.9" y="58" font-size="13" class="mono" font-weight="600">59.8</text>
+<text x="108" y="98" text-anchor="end" font-size="13">Graph</text>
+<rect x="120" y="82" width="166.3" height="24" rx="3" class="bar-g"/>
+<text x="292.3" y="98" font-size="13" class="mono" font-weight="600">63.2</text>
+<text x="120" y="156" font-size="11" class="muted">axis starts at 56 · difference +3.5 [+0.8, +6.1]</text>
+<text x="120" y="16" font-size="13" font-weight="600">Claude Code composite score</text>
+</svg>
+</div><figcaption>Mean of per-case scores out of 100; the axes are cut (marked by the break) to show the gap. Differences are paired by case and replicate, with 95% intervals over cases. The Codex interval [+1.0, +5.5] excludes zero; the Claude Code interval [+0.8, +6.1] excludes zero.</figcaption></figure>
+<p>The composite difference splits into its terms. On Codex, most of the gain is key-fact coverage (+3.5) and rubric (+0.8), with smaller gains from context (+0.1); more factual errors (−1.0), more traps hit (−0.1) take part of it back. On Claude Code, most of the gain is rubric (+3.5) and fewer factual errors (+2.3), with smaller gains from context (+0.7); fewer respected uncertainties (−1.5), lower key-fact coverage (−1.4), more traps hit (−0.1) take part of it back.</p>
+<figure><div class="fig-title">What each term adds to the composite difference (graph minus original)</div><div class="chart"><svg viewBox="0 0 760 482" role="img" aria-label="Points each score term adds to the graph-minus-original composite difference, per provider">
+<line class="axis" x1="130.0" y1="22" x2="130.0" y2="476"/>
+<text x="130.0" y="14" text-anchor="middle" class="muted mono" font-size="11">−4</text>
+<line class="axis" x1="206.2" y1="22" x2="206.2" y2="476"/>
+<text x="206.2" y="14" text-anchor="middle" class="muted mono" font-size="11">−3</text>
+<line class="axis" x1="282.5" y1="22" x2="282.5" y2="476"/>
+<text x="282.5" y="14" text-anchor="middle" class="muted mono" font-size="11">−2</text>
+<line class="axis" x1="358.8" y1="22" x2="358.8" y2="476"/>
+<text x="358.8" y="14" text-anchor="middle" class="muted mono" font-size="11">−1</text>
+<line class="axis strong" x1="435.0" y1="22" x2="435.0" y2="476"/>
+<text x="435.0" y="14" text-anchor="middle" class="muted mono" font-size="11">0</text>
+<line class="axis" x1="511.2" y1="22" x2="511.2" y2="476"/>
+<text x="511.2" y="14" text-anchor="middle" class="muted mono" font-size="11">+1</text>
+<line class="axis" x1="587.5" y1="22" x2="587.5" y2="476"/>
+<text x="587.5" y="14" text-anchor="middle" class="muted mono" font-size="11">+2</text>
+<line class="axis" x1="663.8" y1="22" x2="663.8" y2="476"/>
+<text x="663.8" y="14" text-anchor="middle" class="muted mono" font-size="11">+3</text>
+<line class="axis" x1="740.0" y1="22" x2="740.0" y2="476"/>
+<text x="740.0" y="14" text-anchor="middle" class="muted mono" font-size="11">+4</text>
+<text x="8" y="44" font-size="13" font-weight="600">Codex (GPT-6.1 Terra): total +3.3</text>
+<text x="120" y="67" text-anchor="end" font-size="12">Claims</text>
+<rect x="435.0" y="56" width="266.1" height="16" rx="2" class="bar-g"/>
+<text x="707.1" y="68" font-size="11" class="mono" text-anchor="start">+3.49</text>
+<text x="120" y="93" text-anchor="end" font-size="12">Context</text>
+<rect x="435.0" y="82" width="9.0" height="16" rx="2" class="bar-g"/>
+<text x="450.0" y="94" font-size="11" class="mono" text-anchor="start">+0.12</text>
+<text x="120" y="119" text-anchor="end" font-size="12">Uncertainties</text>
+<rect x="435.0" y="108" width="1.5" height="16" rx="2" class="bar-g"/>
+<text x="442.5" y="120" font-size="11" class="mono" text-anchor="start">+0.02</text>
+<text x="120" y="145" text-anchor="end" font-size="12">Rubric</text>
+<rect x="435.0" y="134" width="61.6" height="16" rx="2" class="bar-g"/>
+<text x="502.6" y="146" font-size="11" class="mono" text-anchor="start">+0.81</text>
+<text x="120" y="171" text-anchor="end" font-size="12">Errors</text>
+<rect x="358.5" y="160" width="76.5" height="16" rx="2" class="bar-w"/>
+<text x="352.5" y="172" font-size="11" class="mono" text-anchor="end">−1.00</text>
+<text x="120" y="197" text-anchor="end" font-size="12">Unsupported</text>
+<rect x="431.4" y="186" width="3.6" height="16" rx="2" class="bar-w"/>
+<text x="425.4" y="198" font-size="11" class="mono" text-anchor="end">−0.05</text>
+<text x="120" y="223" text-anchor="end" font-size="12">Traps</text>
+<rect x="427.8" y="212" width="7.2" height="16" rx="2" class="bar-w"/>
+<text x="421.8" y="224" font-size="11" class="mono" text-anchor="end">−0.10</text>
+<text x="8" y="270" font-size="13" font-weight="600">Claude Code (Sonnet 5.5): total +3.4</text>
+<text x="120" y="293" text-anchor="end" font-size="12">Claims</text>
+<rect x="328.2" y="282" width="106.8" height="16" rx="2" class="bar-w"/>
+<text x="322.2" y="294" font-size="11" class="mono" text-anchor="end">−1.40</text>
+<text x="120" y="319" text-anchor="end" font-size="12">Context</text>
+<rect x="435.0" y="308" width="50.8" height="16" rx="2" class="bar-g"/>
+<text x="491.8" y="320" font-size="11" class="mono" text-anchor="start">+0.67</text>
+<text x="120" y="345" text-anchor="end" font-size="12">Uncertainties</text>
+<rect x="323.4" y="334" width="111.6" height="16" rx="2" class="bar-w"/>
+<text x="317.4" y="346" font-size="11" class="mono" text-anchor="end">−1.46</text>
+<text x="120" y="371" text-anchor="end" font-size="12">Rubric</text>
+<rect x="435.0" y="360" width="266.3" height="16" rx="2" class="bar-g"/>
+<text x="707.3" y="372" font-size="11" class="mono" text-anchor="start">+3.49</text>
+<text x="120" y="397" text-anchor="end" font-size="12">Errors</text>
+<rect x="435.0" y="386" width="173.5" height="16" rx="2" class="bar-g"/>
+<text x="614.5" y="398" font-size="11" class="mono" text-anchor="start">+2.28</text>
+<text x="120" y="423" text-anchor="end" font-size="12">Unsupported</text>
+<rect x="435.0" y="412" width="0.8" height="16" rx="2" class="bar-g"/>
+<text x="441.0" y="424" font-size="11" class="mono" text-anchor="start">0.00</text>
+<text x="120" y="449" text-anchor="end" font-size="12">Traps</text>
+<rect x="424.6" y="438" width="10.4" height="16" rx="2" class="bar-w"/>
+<text x="418.6" y="450" font-size="11" class="mono" text-anchor="end">−0.14</text>
+</svg></div>
+<div class="legend"><span style="--c:var(--graph)">adds points</span><span style="--c:var(--warn)">costs points</span></div>
+<figcaption>Each bar is the term's weight times the change in its mean per judgment (claims on Codex: 35 × (0.821 − 0.721) = +3.49). The terms add up to the difference in mean composite.</figcaption></figure>
+<h3>Where the graph is weaker</h3>
+<ul>
+<li><b>Codex factual errors.</b> Judges flagged more errors in Codex graph drafts (0.17 vs 0.10 per judgment), and after expert checking 61 of 81 flags held against 30 of 47 for the original: 0.33 vs 0.16 confirmed errors per draft, a difference of +0.17 [0.00, +0.36]. <a href="#accuracy">What drives it</a>.</li>
+<li><b>Claude Code uncertainties.</b> Claude graph drafts respected fewer of the fact sheets' open uncertainties (57% vs 66%), even though expert-confirmed errors fell (0.47 vs 0.84 per draft).</li>
+<li><b>Claude Code key facts.</b> Claude Code graph drafts conveyed slightly fewer key facts (73% vs 77%), within our 5-point coverage margin.</li>
+  <li><b>Rubric items that got worse:</b> Codex <b>economy</b> −0.66, <b>scope</b> −0.07, <b>orientation</b> −0.06; Claude Code <b>consequences</b> −0.22, <b>scope</b> −0.17, <b>orientation</b> −0.16, <b>links</b> −0.12.</li>
+</ul>
+<h3>The reviewer-usefulness items</h3>
+<p>The largest rubric gains: Codex <b>feedback</b> +1.30, <b>entry</b> +0.48, <b>links</b> +0.25, <b>consequences</b> +0.14, <b>rationale</b> +0.13, <b>validation</b> +0.11; Claude Code <b>feedback</b> +1.51, <b>entry</b> +1.04, <b>validation</b> +0.40, <b>economy</b> +0.12. The brief's entry row names where to start, the drafting rules keep a closing ask for the kind of review wanted, and Tracetoon writes the Validation section from recorded runs.</p>
+<div class="tbl"><table><thead><tr><th>Item</th><th class="n">Codex original</th><th class="n">Codex graph</th><th class="n">Δ</th><th class="n">Claude original</th><th class="n">Claude graph</th><th class="n">Δ</th></tr></thead><tbody>
+<tr><td>feedback</td><td class="n">0.69</td><td class="n">1.99</td><td class="n better">+1.30</td><td class="n">0.47</td><td class="n">1.97</td><td class="n better">+1.51</td></tr>
+<tr><td>entry</td><td class="n">1.46</td><td class="n">1.94</td><td class="n better">+0.48</td><td class="n">0.85</td><td class="n">1.89</td><td class="n better">+1.04</td></tr>
+<tr><td>validation</td><td class="n">1.73</td><td class="n">1.83</td><td class="n better">+0.11</td><td class="n">1.20</td><td class="n">1.60</td><td class="n better">+0.40</td></tr>
+<tr><td>rationale</td><td class="n">1.28</td><td class="n">1.41</td><td class="n better">+0.13</td><td class="n">1.14</td><td class="n">1.15</td><td class="n ">+0.01</td></tr>
+<tr><td>links</td><td class="n">0.87</td><td class="n">1.12</td><td class="n better">+0.25</td><td class="n">1.03</td><td class="n">0.91</td><td class="n worse">−0.12</td></tr>
+<tr><td>consequences</td><td class="n">1.65</td><td class="n">1.79</td><td class="n better">+0.14</td><td class="n">1.32</td><td class="n">1.10</td><td class="n worse">−0.22</td></tr>
+<tr><td>problem</td><td class="n">1.73</td><td class="n">1.69</td><td class="n ">−0.05</td><td class="n">1.64</td><td class="n">1.60</td><td class="n ">−0.04</td></tr>
+<tr><td>orientation</td><td class="n">2.00</td><td class="n">1.94</td><td class="n worse">−0.06</td><td class="n">1.84</td><td class="n">1.68</td><td class="n worse">−0.16</td></tr>
+<tr><td>scope</td><td class="n">1.92</td><td class="n">1.85</td><td class="n worse">−0.07</td><td class="n">1.89</td><td class="n">1.72</td><td class="n worse">−0.17</td></tr>
+<tr><td>economy</td><td class="n">1.96</td><td class="n">1.30</td><td class="n worse">−0.66</td><td class="n">1.54</td><td class="n">1.66</td><td class="n better">+0.12</td></tr>
+</tbody></table></div>
+<p class="small">Mean item score 0–2 over all judgments in the final run (nulls excluded), sorted by the combined gain.</p>
+<h3>Coverage and accuracy</h3>
+<div class="tbl"><table><thead><tr><th>Measure</th><th class="n">Codex original</th><th class="n">Codex graph</th><th class="n">Claude original</th><th class="n">Claude graph</th></tr></thead><tbody>
+<tr><td>Key facts conveyed (claim coverage)</td><td class="n">72%</td><td class="n better">82%</td><td class="n">77%</td><td class="n worse">73%</td></tr>
+<tr><td>Context conveyed</td><td class="n">28%</td><td class="n better">29%</td><td class="n">27%</td><td class="n better">31%</td></tr>
+<tr><td>Uncertainties respected</td><td class="n">99%</td><td class="n ">99%</td><td class="n">66%</td><td class="n worse">57%</td></tr>
+<tr><td>Reviewer rubric (share of max)</td><td class="n">84%</td><td class="n better">86%</td><td class="n">69%</td><td class="n better">79%</td></tr>
+<tr><td>Factual errors per judgment</td><td class="n">0.10</td><td class="n worse">0.17</td><td class="n">0.29</td><td class="n better">0.14</td></tr>
+<tr><td>Judgments with at least one error</td><td class="n">9%</td><td class="n worse">15%</td><td class="n">24%</td><td class="n better">12%</td></tr>
+<tr><td>Unsupported claims per judgment</td><td class="n">0.01</td><td class="n worse">0.02</td><td class="n">0.12</td><td class="n ">0.12</td></tr>
+<tr><td>Traps hit per judgment</td><td class="n">0.005</td><td class="n worse">0.015</td><td class="n">0.035</td><td class="n worse">0.049</td></tr>
+<tr><td>Composite score (mean of cases)</td><td class="n">72.0</td><td class="n better">75.3</td><td class="n">59.8</td><td class="n better">63.2</td></tr>
+<tr><td>Cost per PR</td><td class="n">$0.447</td><td class="n better">$0.128</td><td class="n">$0.654</td><td class="n better">$0.344</td></tr>
+</tbody></table></div>
+<p>Context coverage rose clearly on Claude Code and only slightly on Codex (28% → 29% on Codex, 27% → 31% on Claude Code). It is the result that depends most on the graph. Context lives in the session logs, not the diff: the user's goal, an earlier failed attempt, a plan that was approved. The graph links each surviving code change back to the prompt, plan or decision that produced it and hands those facts to the writer as rows.</p>
+</section>
+
+<section>
+<h2 id="cost">Token cost</h2>
+<figure><div class="fig-title">Average cost per pull request</div><div class="chart"><svg viewBox="0 0 760 224" role="img" aria-label="Average cost per PR, original workflow versus graph">
+<line class="axis" x1="200.0" y1="24" x2="200.0" y2="210"/>
+<text x="200.0" y="16" text-anchor="middle" class="muted mono" font-size="11">$0.00</text>
+<line class="axis" x1="241.0" y1="24" x2="241.0" y2="210"/>
+<text x="241.0" y="16" text-anchor="middle" class="muted mono" font-size="11">$0.10</text>
+<line class="axis" x1="282.0" y1="24" x2="282.0" y2="210"/>
+<text x="282.0" y="16" text-anchor="middle" class="muted mono" font-size="11">$0.20</text>
+<line class="axis" x1="323.0" y1="24" x2="323.0" y2="210"/>
+<text x="323.0" y="16" text-anchor="middle" class="muted mono" font-size="11">$0.30</text>
+<line class="axis" x1="364.0" y1="24" x2="364.0" y2="210"/>
+<text x="364.0" y="16" text-anchor="middle" class="muted mono" font-size="11">$0.40</text>
+<line class="axis" x1="405.0" y1="24" x2="405.0" y2="210"/>
+<text x="405.0" y="16" text-anchor="middle" class="muted mono" font-size="11">$0.50</text>
+<line class="axis" x1="446.0" y1="24" x2="446.0" y2="210"/>
+<text x="446.0" y="16" text-anchor="middle" class="muted mono" font-size="11">$0.60</text>
+<line class="axis" x1="487.0" y1="24" x2="487.0" y2="210"/>
+<text x="487.0" y="16" text-anchor="middle" class="muted mono" font-size="11">$0.70</text>
+<line class="axis" x1="528.0" y1="24" x2="528.0" y2="210"/>
+<text x="528.0" y="16" text-anchor="middle" class="muted mono" font-size="11">$0.80</text>
+<line class="axis" x1="569.0" y1="24" x2="569.0" y2="210"/>
+<text x="569.0" y="16" text-anchor="middle" class="muted mono" font-size="11">$0.90</text>
+<line class="axis" x1="610.0" y1="24" x2="610.0" y2="210"/>
+<text x="610.0" y="16" text-anchor="middle" class="muted mono" font-size="11">$1.00</text>
+<text x="188" y="64" text-anchor="end" font-size="13" font-weight="600">Codex (GPT-6.1 Terra)</text>
+<rect x="200" y="34" width="183.4" height="22" rx="3" class="bar-m"/>
+<text x="389.4" y="49" font-size="12" class="mono">Original $0.447</text>
+<rect x="200" y="64" width="52.4" height="22" rx="3" class="bar-g"/>
+<text x="258.4" y="79" font-size="12" class="mono">Graph $0.128</text>
+<text x="660" y="58" font-size="20" font-weight="700" class="g-text" text-anchor="middle">−70%</text>
+<text x="660" y="76" font-size="11" class="muted" text-anchor="middle">ratio 0.30 [0.28, 0.32]</text>
+<text x="188" y="156" text-anchor="end" font-size="13" font-weight="600">Claude Code (Sonnet 5.5)</text>
+<rect x="200" y="126" width="268.2" height="22" rx="3" class="bar-m"/>
+<text x="474.2" y="141" font-size="12" class="mono">Original $0.654</text>
+<rect x="200" y="156" width="141.2" height="22" rx="3" class="bar-g"/>
+<text x="347.2" y="171" font-size="12" class="mono">Graph $0.344</text>
+<text x="660" y="150" font-size="20" font-weight="700" class="g-text" text-anchor="middle">−43%</text>
+<text x="660" y="168" font-size="11" class="muted" text-anchor="middle">ratio 0.57 [0.53, 0.62]</text>
+</svg></div>
+<figcaption>Bars show the average priced cost of every model call per PR, including subagents and reviewers. The headline percentage is the more conservative paired measure: the geometric mean of per-PR cost ratios (same case and run), with a 95% interval over cases. Plain averages give larger savings: 71% on Codex and 47% on Claude Code. Claude Code costs are its own reported totals; Codex costs are computed from token counts at list prices (Terra $1/M input, $0.05/M cached, $5/M output; Luna $0.10, $0.01, $0.50).</figcaption></figure>
+<div class="tbl"><table><thead><tr><th>Per PR, mean of 183 drafts</th><th class="n">Codex original</th><th class="n">Codex graph</th><th class="n">Claude original</th><th class="n">Claude graph</th></tr></thead><tbody>
+<tr><td>Writer-model input tokens (mostly cached)</td><td class="n">3.97M</td><td class="n">1.01M</td><td class="n">1.45M</td><td class="n">0.65M</td></tr>
+<tr><td>Writer-model output tokens</td><td class="n">10K</td><td class="n">3K</td><td class="n">20K</td><td class="n">7K</td></tr>
+<tr><td>Writer-model cost</td><td class="n">$0.447</td><td class="n">$0.120</td><td class="n">$0.654</td><td class="n">$0.284</td></tr>
+<tr><td>Reviewer-model input / output tokens</td><td class="n">—</td><td class="n">60K / 7K</td><td class="n">—</td><td class="n">382K / 61K</td></tr>
+<tr><td>Reviewer-model cost</td><td class="n">—</td><td class="n">$0.008</td><td class="n">—</td><td class="n">$0.060</td></tr>
+<tr><td>Cost per PR</td><td class="n">$0.447</td><td class="n better">$0.128</td><td class="n">$0.654</td><td class="n better">$0.344</td></tr>
+<tr><td>Paired cost ratio (graph / original)</td><td class="n" colspan="2" style="text-align:center">0.30× [0.28, 0.32]</td><td class="n" colspan="2" style="text-align:center">0.57× [0.53, 0.62]</td></tr>
+</tbody></table></div>
+<p>The cost story is about where the expensive model spends its tokens. Without the graph, the expensive model reads source code to check its own claims, and on Codex each forked role re-reads the parent's history (2.65 subagent threads per PR on average). With the graph, that structural work is done once, deterministically, and building the brief costs no tokens. What's left is writing, plus a cheap model checking a short packet: reviews cost about $0.06 per PR on Claude Code (Haiku) and $0.008 on Codex (Luna). The writer also writes less: 7K output tokens per PR on Sonnet instead of 20K, and 3K instead of 10K on Terra.</p>
+<h3 id="mainsession">Versus drafting the PR in the main session</h3>
+<p>Why not have the agent that did the work write the PR before it stops? It carries the whole session's context, so every model call re-reads hundreds of thousands of tokens. Prompt caching makes those re-reads cheaper but not free, and a PR still adds new tokens: the diff and git output it reads, and the description it writes. We estimate this rather than measure it, with the method of the earlier report:</p>
+<ul>
+  <li><b>5 model calls</b> to write a PR in the session: look at the diff and log, draft, open it.</li>
+  <li><b>Context per call:</b> the end-of-session context size, measured from each case's original session log (Claude Code: input plus cache tokens of the last assistant message; Codex: the last token count). The average over the 61 PRs is about 408K tokens (range 132K–919K).</li>
+  <li><b>New tokens:</b> about 10K of new input (diff and command output) and about 2K of output (commands and the PR body).</li>
+  <li><b>Cached:</b> all 5 calls read the context from cache. <b>Not cached:</b> the cache has expired, so the first call writes the whole context to cache and the next 4 read it.</li>
+  <li><b>List prices:</b> Sonnet $3/M input, $3.75/M cache write, $0.30/M cache read, $15/M output; Terra $1/M input, $0.05/M cached input, $5/M output. Any long-context surcharge is not included.</li>
+</ul>
+<div class="tbl"><table><thead><tr><th>Per PR</th><th class="n">Main session, cached</th><th class="n">Main session, not cached</th><th class="n">Graph workflow (measured)</th><th class="n">Graph vs main session</th></tr></thead><tbody>
+<tr><td>Sonnet (Claude Code)</td><td class="n">≈ $0.67</td><td class="n">≈ $2.08</td><td class="n">$0.344</td><td class="n">49% cheaper cached, 83% cheaper not cached</td></tr><tr><td>Terra (Codex)</td><td class="n">≈ $0.12</td><td class="n">≈ $0.51</td><td class="n">$0.128</td><td class="n">5% more expensive cached, 75% cheaper not cached</td></tr>
+</tbody></table></div>
+<p>Worked through for Sonnet with the cache warm: 5 × 408K × $0.30/M = $0.61 of cached reads, plus about $0.06 of new input and output. With the cache expired, the first call costs 408K × $3.75/M = $1.53 on its own. <b>The comparison assumes the graph workflow drafts from a fresh session whose context is a compact brief, not the whole history</b>, which is how Tracetoon runs it in this benchmark. On Sonnet the graph workflow is cheaper either way. On Terra, where cached input is very cheap, in-session drafting with a warm cache comes out slightly cheaper; once the cache has expired it costs more. These are estimates, and the quality of in-session drafting hasn't been measured. A fresh agent opening the PR without Tracetoon, the first column of the example above, scores far lower because it never reads the logs.</p>
+</section>
+
+<section>
+<h2 id="nograph">Tracetoon without a graph</h2>
+<p>The original workflow was already a careful multi-agent design. It reads the session logs through a digest and coordinates separate roles so that no agent checks its own work.</p>
+<div class="two">
+  <div class="card m"><h4>Roles</h4><ul>
+    <li><b>Coordinator</b>: the host agent. Runs the CLI steps and usually drafts.</li>
+    <li><b>Researcher</b> (subagent): collects repository guidance, contributing rules and AI policy.</li>
+    <li><b>Drafter</b> (subagent, or the coordinator): writes the description from the digest, the patch and evidence lookups.</li>
+    <li><b>Independent reviewer</b> (fresh subagent): checks every factual clause against the diff and source, looks for counter-evidence, lists omissions.</li>
+  </ul></div>
+  <div class="card m"><h4>Steps</h4><ol>
+    <li>status, doctor</li><li>digest the sessions, choose the matching ones</li><li>context and researcher phase</li><li>draft from the digest</li>
+    <li>comic (optional)</li><li>render, then a fresh independent review</li><li>up to <b>two correction rounds</b>, each with a re-render and a fresh review</li><li>preview and publish</li>
+  </ol></div>
+</div>
+<p><b>Cost in this run:</b> $0.447 per PR on Codex (3.97M input tokens, mostly cached, and 10K output; 2.65 forked subagent threads per PR) and $0.654 on Claude Code (1.45M input, 20K output), all on the writer model. This run doesn't record cost per role. <i>From the earlier 5-PR report:</i> on Sonnet, the coordinator took about $0.29 per PR, reviewers about $0.35 over 1.4 review sessions, and the researcher about $0.05; on Codex the split was coordinator $0.11, drafter fork $0.09, reviewer fork $0.08 and researcher fork $0.04, because each forked role re-reads the parent's history.</p>
+<p>The design is sound, and it produces accurate descriptions. Its cost comes from asking an expensive model to rediscover structure from text: which commit sentence maps to which hunk, which symbols are new, and why a change was made. Then a second instance does all of it again to check the first, at full price.</p>
+</section>
+
+<section>
+<h2 id="graph">What the graph does</h2>
+<p>The graph moves that rediscovery out of the model and into a deterministic build step. One command, <code>tracetoon prepare</code>, reads the session logs and git, builds an embedded graph in Relate, adds search links from Relate's fulltext index, runs a fixed set of Cypher queries, and prints a compact evidence brief. No model is involved, so this step costs no tokens.</p>
+<figure><div class="fig-title">From agent logs to a cited PR description</div><div class="chart"><svg viewBox="0 0 760 210" role="img" aria-label="Pipeline: session logs and git feed an embedded Relate graph; fixed Cypher queries produce a brief; the writing model drafts from the brief; Tracetoon checks it and cheap reviewers review it">
 <rect x="10" y="20" width="170" height="64" rx="8" class="box-n"/>
 <text x="95" y="46" text-anchor="middle" font-size="13" font-weight="600">Agent session logs</text>
 <text x="95" y="66" text-anchor="middle" font-size="11" class="muted">requests, plans, edits, runs</text>
@@ -186,460 +534,340 @@ svg .box-n{fill:var(--note);stroke:var(--rule)} svg .box-g{fill:var(--graph-soft
 <path d="M370 52 h14" class="arrow"/><path d="M384 47 l6 5 l-6 5" class="arrow"/>
 <path d="M560 52 h14" class="arrow"/><path d="M574 47 l6 5 l-6 5" class="arrow"/>
 <path d="M665 84 v26 h-275 v14" class="arrow"/><path d="M385 118 l5 6 l5 -6" class="arrow"/>
-<rect x="200" y="126" width="360" height="64" rx="8" class="box-m"/>
-<text x="380" y="152" text-anchor="middle" font-size="13" font-weight="600">Writing model drafts the PR from the brief</text>
-<text x="380" y="172" text-anchor="middle" font-size="11" class="muted">Tracetoon checks every sentence and writes the Validation section</text>
+<rect x="160" y="126" width="440" height="64" rx="8" class="box-m"/>
+<text x="380" y="152" text-anchor="middle" font-size="13" font-weight="600">Writer drafts from the brief · deterministic checks · 2 cheap reviewers</text>
+<text x="380" y="172" text-anchor="middle" font-size="11" class="muted">one merged list of findings, one edit pass; Validation written from recorded runs</text>
 <text x="10" y="118" font-size="11" class="muted mono">deterministic · no tokens</text>
 </svg></div>
-<figcaption>The graph is rebuilt for every PR on the developer's machine, offline. Edges such as "this agent edit survives in the final diff" connect a hunk back to the prompt that asked for it and forward to the commit sentence that describes it.</figcaption></figure>
-
-<h2 id="quality">Quality: judges prefer the graph PRs on both agents</h2>
-<p>Each description was compared head to head with the original workflow's description of the same change. Two judges per provider read both, in both orders, against an expert-reviewed fact sheet and the original evidence, and picked the one a maintainer would rather receive. Points on a 100-point score are an arbitrary scale, so we lead with the judges' choices.</p>
-<figure><div class="fig-title">How often judges picked the graph-written PR</div>
-<div class="chart"><svg viewBox="0 0 760 294" role="img" aria-label="Share of decided head-to-head comparisons won by the graph PR, per judge, with 95% case-clustered intervals">
-<line class="axis" x1="250.0" y1="22" x2="250.0" y2="272"/>
-<text x="250.0" y="14" text-anchor="middle" class="muted mono" font-size="11">30%</text>
-<line class="axis" x1="347.2" y1="22" x2="347.2" y2="272"/>
-<text x="347.2" y="14" text-anchor="middle" class="muted mono" font-size="11">40%</text>
-<line class="axis strong" x1="444.4" y1="22" x2="444.4" y2="272"/>
-<text x="444.4" y="14" text-anchor="middle" class="muted mono" font-size="11">50%</text>
-<line class="axis" x1="541.6" y1="22" x2="541.6" y2="272"/>
-<text x="541.6" y="14" text-anchor="middle" class="muted mono" font-size="11">60%</text>
-<line class="axis" x1="638.8" y1="22" x2="638.8" y2="272"/>
-<text x="638.8" y="14" text-anchor="middle" class="muted mono" font-size="11">70%</text>
-<line class="axis" x1="736.0" y1="22" x2="736.0" y2="272"/>
-<text x="736.0" y="14" text-anchor="middle" class="muted mono" font-size="11">80%</text>
-<text x="448.4" y="286" class="muted" font-size="11">even split</text>
-<text x="238" y="54.0" text-anchor="end" font-size="13" font-weight="600">Codex · both judges agree</text>
-<line x1="555.2" y1="50.0" x2="733.1" y2="50.0" class="ci"/>
-<circle cx="647.5" cy="50.0" r="7" class="dot-g"/>
-<text x="741.1" y="54.0" font-size="12" class="mono">71% · 83–34</text>
-<text x="238" y="94.0" text-anchor="end" font-size="13" class="muted">Codex · GPT-6.1 Sol judge</text>
-<line x1="517.3" y1="90.0" x2="692.3" y2="90.0" class="ci"/>
-<circle cx="606.7" cy="90.0" r="5.5" class="dot-g"/>
-<text x="700.3" y="94.0" font-size="12" class="mono">67% · 96–48</text>
-<text x="238" y="134.0" text-anchor="end" font-size="13" class="muted">Codex · GPT-6.1 Terra judge</text>
-<line x1="542.6" y1="130.0" x2="719.5" y2="130.0" class="ci"/>
-<circle cx="630.1" cy="130.0" r="5.5" class="dot-g"/>
-<text x="727.5" y="134.0" font-size="12" class="mono">69% · 103–46</text>
-<text x="238" y="174.0" text-anchor="end" font-size="13" font-weight="600">Claude Code · both judges agree</text>
-<line x1="645.6" y1="170.0" x2="818.6" y2="170.0" class="ci"/>
-<circle cx="737.9" cy="170.0" r="7" class="dot-g"/>
-<text x="826.6" y="174.0" font-size="12" class="mono">80% · 69–17</text>
-<text x="238" y="214.0" text-anchor="end" font-size="13" class="muted">Claude Code · Opus 5.5 judge</text>
-<line x1="590.2" y1="210.0" x2="748.6" y2="210.0" class="ci"/>
-<circle cx="674.8" cy="210.0" r="5.5" class="dot-g"/>
-<text x="756.6" y="214.0" font-size="12" class="mono">74% · 112–40</text>
-<text x="238" y="254.0" text-anchor="end" font-size="13" class="muted">Claude Code · Sonnet 5.5 judge</text>
-<line x1="572.7" y1="250.0" x2="759.3" y2="250.0" class="ci"/>
-<circle cx="671.8" cy="250.0" r="5.5" class="dot-g"/>
-<text x="767.3" y="254.0" font-size="12" class="mono">73% · 80–29</text>
-</svg></div>
-<figcaption>Share of decided head-to-heads (wins vs losses; ties and order-dependent splits excluded) won by the graph PR, with 95% intervals bootstrapped over the 61 cases. A green dot means the whole interval is above an even split. "Both judges agree" counts only comparisons where the two judges picked the same winner.</figcaption></figure>
+<figcaption>The graph is rebuilt for every PR on the developer's machine, offline.</figcaption></figure>
+<h3>The graph</h3>
 <div class="two">
-  <div class="card"><h4>Codex (GPT-6.1 Terra)</h4><ul>
-    <li>When both judges agreed, they picked the graph PR <b>83 times to 34</b> (71%).</li>
-    <li>Each judge alone: GPT-6.1 Terra picked the graph PR in 69% of decided pairs, GPT-6.1 Sol in 67%.</li>
-    <li>It conveyed <b>82%</b> of each change's key facts, against 72%.</li>
-  </ul></div>
-  <div class="card"><h4>Claude Code (Sonnet 5.5)</h4><ul>
-    <li>Each judge alone: Opus 5.5 picked the graph PR <b>112 times to 40</b> (74%), Sonnet 5.5 80 to 29 (73%).</li>
-    <li>When both judges agreed: 69–17 (80%, 95% interval 71%–88%).</li>
-    <li>Fewer factual errors per draft after expert checking: 0.68 vs 0.81.</li>
-  </ul></div>
+  <div class="card g"><h4>13 node types</h4><p style="font-size:15px;margin:0">Session · Prompt · Decision · Plan · Run · Receipt · Edit · File · Hunk · Commit · CommitClaim · Change · HeadRef</p></div>
+  <div class="card g"><h4>16 relationship types</h4><p style="font-size:15px;margin:0"><code>SURVIVES_IN</code> (an agent edit still present in the final diff) · <code>TIED_TO</code> (a search link from a commit sentence, request or plan to a hunk, with a score) · <code>SAYS</code> (commit → sentence) · <code>EXPLAINED_BY</code> · <code>ASKED_BY</code> · <code>ASKED_BEFORE</code> · <code>EDITS</code> · <code>LATER_EDIT</code> · <code>INTRODUCED</code> · <code>IN_TURN</code> · <code>IN_SESSION</code> · <code>NEXT</code> · <code>OF</code> · <code>MADE</code> · <code>TOUCHES</code> · <code>HAS</code></p></div>
 </div>
-<h3>The score lead</h3>
-<p>The benchmark's composite score (claims, context, uncertainties and a reviewer rubric, minus penalties for errors) tells the same story. The charts show only the range where the two workflows differ.</p>
-<figure><div class="zooms">
-<svg viewBox="0 0 380 168" role="img" aria-label="Codex composite score: original 72.1, graph 76.3; axis starts at 70">
-<line class="axis" x1="120.0" y1="30" x2="120.0" y2="118"/>
-<text x="120.0" y="134" text-anchor="middle" class="muted mono" font-size="11">70</text>
-<line class="axis" x1="177.5" y1="30" x2="177.5" y2="118"/>
-<text x="177.5" y="134" text-anchor="middle" class="muted mono" font-size="11">72</text>
-<line class="axis" x1="235.0" y1="30" x2="235.0" y2="118"/>
-<text x="235.0" y="134" text-anchor="middle" class="muted mono" font-size="11">74</text>
-<line class="axis" x1="292.5" y1="30" x2="292.5" y2="118"/>
-<text x="292.5" y="134" text-anchor="middle" class="muted mono" font-size="11">76</text>
-<line class="axis" x1="350.0" y1="30" x2="350.0" y2="118"/>
-<text x="350.0" y="134" text-anchor="middle" class="muted mono" font-size="11">78</text>
-<path d="M114 122 l6 -8 l6 8" class="break"/><path d="M114 128 l6 -8 l6 8" class="break"/>
-<text x="108" y="58" text-anchor="end" font-size="13">Original</text>
-<rect x="120" y="42" width="59.8" height="24" rx="3" class="bar-m"/>
-<text x="185.8" y="58" font-size="13" class="mono" font-weight="600">72.1</text>
-<text x="108" y="98" text-anchor="end" font-size="13">Graph</text>
-<rect x="120" y="82" width="182.6" height="24" rx="3" class="bar-g"/>
-<text x="308.6" y="98" font-size="13" class="mono" font-weight="600">76.3</text>
-<text x="120" y="156" font-size="11" class="muted">axis starts at 70 · difference +4.3 [+2.1, +6.3]</text>
-<text x="120" y="16" font-size="13" font-weight="600">Codex composite score</text>
-</svg>
-<svg viewBox="0 0 380 168" role="img" aria-label="Claude Code composite score: original 59.4, graph 63.0; axis starts at 56">
-<line class="axis" x1="120.0" y1="30" x2="120.0" y2="118"/>
-<text x="120.0" y="134" text-anchor="middle" class="muted mono" font-size="11">56</text>
-<line class="axis" x1="177.5" y1="30" x2="177.5" y2="118"/>
-<text x="177.5" y="134" text-anchor="middle" class="muted mono" font-size="11">58</text>
-<line class="axis" x1="235.0" y1="30" x2="235.0" y2="118"/>
-<text x="235.0" y="134" text-anchor="middle" class="muted mono" font-size="11">60</text>
-<line class="axis" x1="292.5" y1="30" x2="292.5" y2="118"/>
-<text x="292.5" y="134" text-anchor="middle" class="muted mono" font-size="11">62</text>
-<line class="axis" x1="350.0" y1="30" x2="350.0" y2="118"/>
-<text x="350.0" y="134" text-anchor="middle" class="muted mono" font-size="11">64</text>
-<path d="M114 122 l6 -8 l6 8" class="break"/><path d="M114 128 l6 -8 l6 8" class="break"/>
-<text x="108" y="58" text-anchor="end" font-size="13">Original</text>
-<rect x="120" y="42" width="97.5" height="24" rx="3" class="bar-m"/>
-<text x="223.5" y="58" font-size="13" class="mono" font-weight="600">59.4</text>
-<text x="108" y="98" text-anchor="end" font-size="13">Graph</text>
-<rect x="120" y="82" width="200.7" height="24" rx="3" class="bar-g"/>
-<text x="326.7" y="98" font-size="13" class="mono" font-weight="600">63.0</text>
-<text x="120" y="156" font-size="11" class="muted">axis starts at 56 · difference +3.6 [+1.0, +6.3]</text>
-<text x="120" y="16" font-size="13" font-weight="600">Claude Code composite score</text>
-</svg>
-</div><figcaption>Mean of per-case scores out of 100; the axes are cut (marked by the break) to show the gap. Differences are paired by case and replicate, with 95% intervals over cases. The Codex gain's interval excludes zero; the Claude Code interval includes it.</figcaption></figure>
+<p>The edge that does the most work is <code>SURVIVES_IN</code>, which connects an agent's edit in the logs to a hunk that's still in the final diff. From a hunk you can walk back to the prompt that asked for it and forward to the commit sentence that describes it.</p>
+<h3>The evidence brief</h3>
+<p>The queries turn the graph into short tables the writer cites by reference (CH1, S2, L1…). Rows marked <i>new</i> were added during the tuning rounds after the first 61-PR run.</p>
+<div class="tbl"><table><thead><tr><th>Brief section</th><th>What it gives the writer</th><th>Rubric / measure it helps</th></tr></thead><tbody>
+<tr><td>changes</td><td>Change units ranked by weight and split by file role: where (file and owning symbol), new symbols, old → new values, behavior conditions</td><td>claims, entry, orientation, problem</td></tr>
+<tr><td>changes · <code>before</code> <i>new</i></td><td>For hunks that only add code, the key lines of the enclosing function in the base tree, so the writer can say what the code did before in one "Previously…" sentence</td><td>problem, accuracy (direction)</td></tr>
+<tr><td>changes · <code>details</code> <i>new</i></td><td>Diff-only facts writers otherwise drop: new CLI flags and their defaults, named constants, CI job and step names, config keys (at most five per unit)</td><td>claims, consequences</td></tr>
+<tr><td>entry</td><td>Where to start and what is tied to it, and nothing else</td><td>entry, orientation</td></tr>
+<tr><td>owners</td><td>Which function implements each behavior</td><td>accuracy (placement), problem</td></tr>
+<tr><td>commitMessages + implementedBy</td><td>Each commit sentence linked to the hunks that implement it, by structure or a search link (<code>TIED_TO</code>), with the code lines under it marked removed or added</td><td>accuracy (placement, direction), claims</td></tr>
+<tr><td>requests, process</td><td>The user's goal, plans and decisions, scoped to the turns that produced surviving code</td><td>context, rationale</td></tr>
+<tr><td>background <i>new</i></td><td>How the work came about when this PR's own turns don't show it: the session's goal and the latest earlier plan or decision (at most three rows)</td><td>context, rationale</td></tr>
+<tr><td>decisions <i>new</i></td><td>Questions the agent asked and the user answered, recorded as decisions; unanswered questions are left out</td><td>context, rationale</td></tr>
+<tr><td>limits, with derived limits <i>new</i></td><td>Open points: files edited after the last passing run, a run whose exit status was hidden, tests that only exercise fakes, scripts no session ran, hunks no captured edit explains. A limit retires once a fresh passing check exists.</td><td>uncertainties, validation</td></tr>
+<tr><td>tests, housekeeping</td><td>New test titles per file; version bumps, copies and generated files in one row</td><td>claims, economy, scope</td></tr>
+<tr><td>validation</td><td>Recorded runs and fail → pass history; Tracetoon writes the Validation section from these</td><td>validation, accuracy</td></tr>
+<tr><td>doNotSay</td><td>Existing names, conditional code, commit-only results, the old-behavior rule, the exact file list</td><td>accuracy, traps</td></tr>
+<tr><td>headScan</td><td>Docs that still mention a removed name; callers of changed symbols</td><td>consequences, entry</td></tr>
+</tbody></table></div>
+<h3>Fewer roles, fewer steps</h3>
+<div class="two">
+  <div class="card m"><h4>Without the graph</h4><ol><li>digest, then a researcher subagent</li><li>drafter reads the digest and patch, expands refs</li><li>fresh reviewer re-reads the source</li><li>up to two correction rounds, each with a fresh review</li><li>render, publish</li></ol>
+  <p class="small">4 roles, all on the expensive model.</p></div>
+  <div class="card g"><h4>With the graph</h4><ol><li><code>prepare</code>: digest, graph, search links and brief in one deterministic step</li><li>writer drafts from the brief, tagging every factual sentence with brief refs</li><li><code>render --check</code>: deterministic coverage and claim checks</li><li>two cheap reviewers (general and completeness) at high effort, merged into one list</li><li>one edit pass, render, publish</li></ol>
+  <p class="small">1 expensive role (the writer) plus 2 cheap reviewers. No researcher, no separate drafter, no re-review rounds, no forks.</p></div>
+</div>
+<p>Because every sentence carries brief refs, Tracetoon checks the draft without a model. It flags uncovered change units, commit sentences and tests; a sentence naming a file outside its cited change; "new" next to a name that already existed; "always" or "only" on code with a branch; results only a commit message claims; and a "housekeeping only" line when logic changed. Brief refs are stripped before the body is published.</p>
+</section>
 
-<h2 id="cost">Cost: 46% less on Codex, 31% less on Claude Code</h2>
-<p>The graph replaces work the model used to do with a deterministic build step, and the drafting and review steps read a short brief instead of the full logs.</p>
-<figure><div class="fig-title">Average cost per pull request</div><div class="chart"><svg viewBox="0 0 760 224" role="img" aria-label="Average cost per PR, original workflow versus graph">
-<line class="axis" x1="200.0" y1="24" x2="200.0" y2="210"/>
-<text x="200.0" y="16" text-anchor="middle" class="muted mono" font-size="11">$0.00</text>
-<line class="axis" x1="258.6" y1="24" x2="258.6" y2="210"/>
-<text x="258.6" y="16" text-anchor="middle" class="muted mono" font-size="11">$0.10</text>
-<line class="axis" x1="317.1" y1="24" x2="317.1" y2="210"/>
-<text x="317.1" y="16" text-anchor="middle" class="muted mono" font-size="11">$0.20</text>
-<line class="axis" x1="375.7" y1="24" x2="375.7" y2="210"/>
-<text x="375.7" y="16" text-anchor="middle" class="muted mono" font-size="11">$0.30</text>
-<line class="axis" x1="434.3" y1="24" x2="434.3" y2="210"/>
-<text x="434.3" y="16" text-anchor="middle" class="muted mono" font-size="11">$0.40</text>
-<line class="axis" x1="492.9" y1="24" x2="492.9" y2="210"/>
-<text x="492.9" y="16" text-anchor="middle" class="muted mono" font-size="11">$0.50</text>
-<line class="axis" x1="551.4" y1="24" x2="551.4" y2="210"/>
-<text x="551.4" y="16" text-anchor="middle" class="muted mono" font-size="11">$0.60</text>
-<line class="axis" x1="610.0" y1="24" x2="610.0" y2="210"/>
-<text x="610.0" y="16" text-anchor="middle" class="muted mono" font-size="11">$0.70</text>
-<text x="188" y="64" text-anchor="end" font-size="13" font-weight="600">Codex (GPT-6.1 Terra)</text>
-<rect x="200" y="34" width="262.0" height="22" rx="3" class="bar-m"/>
-<text x="468.0" y="49" font-size="12" class="mono">Original $0.447</text>
-<rect x="200" y="64" width="131.8" height="22" rx="3" class="bar-g"/>
-<text x="337.8" y="79" font-size="12" class="mono">Graph $0.225</text>
-<text x="660" y="58" font-size="20" font-weight="700" class="g-text" text-anchor="middle">−46%</text>
-<text x="660" y="76" font-size="11" class="muted" text-anchor="middle">ratio 0.54 [0.50, 0.59]</text>
-<text x="188" y="156" text-anchor="end" font-size="13" font-weight="600">Claude Code (Sonnet 5.5)</text>
-<rect x="200" y="126" width="383.2" height="22" rx="3" class="bar-m"/>
-<text x="589.2" y="141" font-size="12" class="mono">Original $0.654</text>
-<rect x="200" y="156" width="242.8" height="22" rx="3" class="bar-g"/>
-<text x="448.8" y="171" font-size="12" class="mono">Graph $0.415</text>
-<text x="660" y="150" font-size="20" font-weight="700" class="g-text" text-anchor="middle">−31%</text>
-<text x="660" y="168" font-size="11" class="muted" text-anchor="middle">ratio 0.69 [0.64, 0.75]</text>
-</svg></div>
-<figcaption>Bars show the average priced cost of every model call per PR, including subagents and the review pass. The headline percentage is the more conservative paired measure: the geometric mean of per-PR cost ratios (same case and run), with a 95% interval over cases. The plain averages give larger savings (50% on Codex, 37% on Claude Code). Codex costs use published per-token prices; Claude Code reports its own cost.</figcaption></figure>
+<section>
+<h2 id="relate">Why Relate: an embedded graph database for agent systems</h2>
+<p><a href="https://github.com/relatedb/relate">Relate</a> is an embedded graph database written in Rust, and it is the engine this Tracetoon build runs on (pinned at v0.1.2-5, commit aa0f79e). Embedded means it runs inside the application process, with no server to install, start or connect to. Tracetoon ships Relate compiled to WebAssembly inside its CLI, so the same build runs on Linux, macOS and Windows, works offline, and builds a fresh graph for every PR. Agent tooling usually runs on a developer's machine, inside a sandbox or in CI, where a database server is a non-starter; Relate gives it a real graph model and Cypher with the footprint of a library.</p>
+<p>The questions Tracetoon has to answer are relationship questions: which request led to this code, did a passing test run after the last edit, which commit sentence describes this hunk. Here is the core of the query that finds which user request produced a surviving piece of code, and which plans or decisions came with it:</p>
+<pre class="cypher">MATCH (h:Hunk {id: $hunk})&lt;-[:SURVIVES_IN]-(e:Edit)-[:IN_SESSION]-&gt;(:Session {band: 'included'})
+OPTIONAL MATCH (e)-[:IN_TURN]-&gt;(p:Prompt)
+OPTIONAL MATCH (x)-[:IN_TURN]-&gt;(p) WHERE x:Decision OR x:Plan
+RETURN p.id AS prompt, p.text AS request, collect(DISTINCT x.id) AS plansAndDecisions</pre>
+<p>Some links have no structure to follow: a commit sentence about a script may share no symbol with the code it describes. For those, Tracetoon uses Relate's built-in fulltext index, which ranks hunks with BM25, and stores accepted hits as <code>TIED_TO</code> edges with a score:</p>
+<pre class="cypher">CREATE FULLTEXT INDEX hunk_text FOR (h:Hunk) ON EACH [h.text]
 
-<h2 id="example">One PR, three ways</h2>
-<p>The same change described three ways, all written by Codex (GPT-6.1 Terra) and judged by the same judges against the same expert fact sheet: the agent opening the PR on its own, Tracetoon's original multi-agent workflow, and Tracetoon with the evidence graph. Highlights come from the judges' clause-by-clause review; the notes list key facts from the fact sheet that a version left out.</p>
-<div class="keys"><span><mark class="err">contradicted by the evidence</mark></span><span><mark class="over">broader than the evidence</mark></span></div>
-<div class="ex3"><article class="pr"><div class="pr-head"><div class="who n">Agent opens the PR itself · no Tracetoon</div><div class="ttl">Group brief evidence into change neighborhoods</div>
-<div class="chips"><span class="chip">score 50.7</span><span class="chip bad">1 contradicted claim</span><span class="chip">key facts 6 of 10 · context 0 of 5</span><span class="chip">$0.068</span></div></div><div class="pr-body"><h5>Summary</h5>
-<ul>
-<li>Group evidence into per-change neighborhoods that keep requests, commit sentences, hunks, and relevant changed lines together within an evidence budget.</li>
-<li>Link commit sentences to matching hunks and expose the neighborhood through brief queries and the writing workflow.</li>
-<li><mark class="err">Report recurring brief-check findings once</mark>, and distinguish results attributed to commit messages from claims about captured runs.</li>
-</ul>
-<h5>Validation</h5>
-<ul>
-<li><code>bun run test</code> — passed (39 source test files).</li>
-<li><code>bun run typecheck</code> — passed.</li>
-<li><code>bun run build:check</code> — failed because the bundle output receipt is missing in this checkout.</li>
-<li>Bundled and compiled contract suites left to CI.</li>
-</ul><div class="ann miss"><b>Missing:</b> A new brief layout switch (src/graph/layout.ts): TRACETOON_BRIEF_LAYOUT=neighborhood|toon, defaulting to neighborhood unless set to &#x27;toon&#x27;, ; patchHunks now stores up to 24 key changed lines per hunk (Hunk.code), which the graph build writes onto Hunk nodes. Lines are picked by pri; Tests: new tests/neighborhood.test.ts covers key code lines, sentence→hunk links, every change getting a block, budget packing and render ac; The bundled plugin/skills/tracetoon/dist/tracetoon.mjs is rebuilt and build.json&#x27;s buildId changes; the version stays 1.0.0-rc.24.…</div></div></article><article class="pr"><div class="pr-head"><div class="who m">Tracetoon, original workflow</div><div class="ttl">Add neighborhood evidence briefs and limit render loops</div>
-<div class="chips"><span class="chip">score 68.2</span><span class="chip good">0 contradicted claims</span><span class="chip">key facts 6 of 10 · context 1 of 5</span><span class="chip">$0.273</span></div></div><div class="pr-body"><p>The evidence brief previously presented graph evidence as cross-referenced TOON tables. This adds a neighborhood layout that groups each change with its requests, commit sentences and hunks, including selected changed lines. It is the default; <code>TRACETOON_BRIEF_LAYOUT=toon</code> retains the previous layout. The change blocks use a configurable evidence budget, clipping and packing content as needed.</p>
-<p>The commit notes report repeated render findings during Codex drafts. Render now lists previously reported brief findings as repeated rather than blocking again, and excludes results attributed to a commit message from run claims.</p>
-<p>Review <code>src/graph/neighborhood.ts</code> for the layout and packing, then <code>src/graph/briefRender.ts</code> for finding handling; the neighborhood and render-loop tests cover these paths.</p>
-<p>Validation: <code>bun run typecheck</code>, <code>bun run test</code> (39 files), and <code>bun run bundle</code> passed. The bundled and compiled suites are left to CI.</p><div class="ann miss"><b>Missing:</b> patchHunks now stores up to 24 key changed lines per hunk (Hunk.code), which the graph build writes onto Hunk nodes. Lines are picked by pri; In neighborhood mode briefParts adds a citable &#x27;hunks&#x27; section (ref H#, change, file, lines, scope, code, why, sentences, weight, role), so ; The brief&#x27;s avoid rules are reworded for the neighborhood layout (tags may cite H#; name a file from → H# hunks or implementedBy; &#x27;was&#x27; from; graphBrief (used by prepare) and `tracetoon query brief` both print the neighborhood text when that layout is on; otherwise the TOON tables …</div></div></article><article class="pr"><div class="pr-head"><div class="who g">Tracetoon with the evidence graph</div><div class="ttl">Present evidence briefs as graph neighborhoods</div>
-<div class="chips"><span class="chip">score 89.6</span><span class="chip good">0 contradicted claims</span><span class="chip">key facts 10 of 10 · context 2 of 5</span><span class="chip">$0.216</span></div></div><div class="pr-body"><p>This gives PR writers a graph-shaped evidence brief that keeps related requests, commit explanations, hunks and changed lines together, addressing the request for a better way to pass the graph to the writer.</p>
-<p>Previously, the brief presented the evidence as TOON tables linked by identifiers. The entry point in <code>src/graph/evidence.ts</code> now selects a neighborhood layout by default; <code>TRACETOON_BRIEF_LAYOUT=toon</code> retains the previous layout. Each change block brings its requests, commit sentences, files and hunk references together with selected old and new lines. Hunks retain up to 24 key changed lines and can be cited; links from commit sentences to hunks use conservative matching. The neighborhood renderer packs change blocks to a default budget of 2,112 tokens, configurable with <code>TRACETOON_BRIEF_BUDGET</code>, selecting code lines by value per character and compacting larger briefs. Fixed lines can exceed that budget, and rules and validation tables sit outside it.</p>
-<p>The <code>brief</code> query uses the selected layout in its text output.</p>
-<p>The render check also moves previously reported findings into a nonblocking repeated list, and accepts results attributed to a commit message without treating them as validation claims. The commit attributes lengthy drafting loops to findings writers could not clear, including commit-attributed results flagged as run claims and uncovered request and change rows. The contributor guidance now points writers to hunk references when identifying the code that implements a change.</p>
-<p><code>tests/neighborhood.test.ts</code> covers key line selection, sentence-to-hunk matching and budget packing. <code>tests/render-loops.test.ts</code> covers commit-attributed results and repeated findings; the shipped bundle is regenerated.</p>
-<h5>Validation</h5>
-<ul>
-<li><code>bun run typecheck</code>: passed, run on the submitted content.</li>
-<li><code>bun run test</code>: passed (Source test files: 39 passed, 0 failed (up to 4 fresh processes)), run on the submitted content.</li>
-</ul><div class="ann add"><b>Only this version conveys:</b> patchHunks now stores up to 24 key changed lines per hunk (Hunk.code), which the graph build writes onto Hunk nodes. Lines are picked by pri; The work came out of a graph-vs-relational &#x27;shape test&#x27;: at equal evidence size the graph brief out-informed the relational arm, and the use</div></div></article></div>
-<p style="margin-top:14px;font-size:14px;color:var(--muted)">Case <code>tracetoon-neighborhood</code>, a change to an open-source repository in the benchmark. Descriptions are shown as written, minus attribution footers.</p>
+MATCH (h:Hunk)
+SEARCH h IN (FULLTEXT INDEX hunk_text FOR $text LIMIT 256) SCORE AS s
+RETURN h.id AS hunk, s</pre>
+<p>Each of these would take a model thousands of tokens to reconstruct from raw text, and the result would vary from run to run. In Relate each is a deterministic query that costs no tokens, and because the brief comes from queries, every sentence in the PR can be traced back through a brief row to specific hunks and session lines.</p>
+</section>
 
-<h2 id="cases">Every case</h2>
-<p>The gains aren't carried by a few cases. Each dot is one pull request: the graph's mean score minus the original's over three runs.</p>
+<section>
+<h2 id="journey">How we got here</h2>
+<p>Each row is the graph workflow against Tracetoon's original workflow on the same model and harness. "Picks" are head-to-head wins–losses. The four tuning rounds ran on 25 of the 61 PRs with 2 replicates and <b>one judge per provider</b> (GPT-6.1 Terra for Codex, Sonnet 5.5 for Claude Code), so their picks count that judge's order-stable choices and aren't directly comparable with the two-judge rows. The two panel rows ran all 61 PRs once with both judges, against the same build's first replicate; their cost column is the saving per draft against candidate58, not against the original workflow.</p>
+<div class="tbl"><table><thead><tr><th>Step</th><th>What changed</th><th class="n">Codex: score Δ · picks · cost</th><th class="n">Claude Code: score Δ · picks · cost</th></tr></thead><tbody><tr><td>Earlier 5-PR report (round 23)</td><td>The published result: 5 Tracetoon PRs, 5 replicates</td><td class="n">+3.5 · 12–1 · −35%</td><td class="n">+5.2 · 18–1 · −41%</td></tr><tr><td>First 61-PR run</td><td>The same graph workflow (with accuracy fixes) on 61 PRs from 12 repositories, 3 replicates, two judges</td><td class="n">+2.7 · 64–38 · −39%</td><td class="n">+0.8 · 54–46 · −28%</td></tr><tr><td>Tuning start (r0, 25 cases)</td><td>The first run's build re-scored on the 25 tuning cases: its 20 worst losses plus 5 controls</td><td class="n">+1.1 · 25–16</td><td class="n">−5.5 · 11–19</td></tr><tr><td>Tuning r1 (candidate54)</td><td>Motivation, uncertainties, old behavior (<code>before</code>), validation and finishing rows</td><td class="n">+1.5 · 28–14</td><td class="n">−0.4 · 18–9</td></tr><tr><td>Tuning r2 (candidate56)</td><td>Noise fixes: CI rows only after a push, platform rows only from platform lines, unrun-script, workflow and fakes rows, a <code>details</code> column</td><td class="n">+3.4 · 27–14</td><td class="n">−0.2 · 17–9</td></tr><tr><td>Tuning r3 (candidate57)</td><td>Fixes for persistent losers (session matching, answered questions as decisions, plan-vs-code rows, entry ranking); regressed</td><td class="n">+1.2 · 28–17</td><td class="n">−1.4 · 19–10</td></tr><tr><td>Tuning r4 (candidate58)</td><td>Entry ranking reverted; no unanswered decisions; CI runs tied to workflow and platform; drafting rules for economy, consequences and problem</td><td class="n">+2.8 · 27–17</td><td class="n">+3.5 · 19–5</td></tr><tr><td>61-case panel (candidate61)</td><td>A quality pass plus a cost-focused pass (leaner skill, no polling, compact output); Codex quality regressed</td><td class="n">−3.9 · 15–24 · −44% vs candidate58</td><td class="n">−0.8 · 16–13 · −18% vs candidate58</td></tr><tr><td>61-case panel (candidate62)</td><td>candidate61 with the regression diagnosed and fixed; the cost changes kept</td><td class="n">+2.2 · 23–15 · −43% vs candidate58</td><td class="n">+2.1 · 22–8 · −17% vs candidate58</td></tr><tr><td><b>Final run</b> (candidate62)</td><td>candidate62 on all 61 PRs, 3 replicates (the first is the panel's), both pre-registered judges</td><td class="n"><b>+3.3 · 79–38 · −70%</b></td><td class="n"><b>+3.5 · 60–21 · −43%</b></td></tr></tbody></table></div>
+<p>The first 61-PR run showed the 5-PR result didn't carry over evenly: Codex still gained, Claude Code was level. Loss analyses traced most losses to the brief, not the model: motivation clipped, uncertainties deleted by an absence check, old behavior unstated, and passing runs hidden. The tuning rounds fixed those generically (no case names in any change); round 3 regressed and was reverted in round 4.</p>
+<p>Round 4's build (candidate58) then ran on all 61 PRs with both judges: judges preferred it 71% of the time on Codex at 46% lower cost, and 80% on Claude Code at 31% lower cost. Two bug-fix builds followed for problems found in that run's drafts, such as Claude Code reviewers that ended the session before their review came back. <code>candidate61</code> then combined a quality pass with a cost-focused pass. On a 61-case panel it cut cost, but Codex quality regressed (−7.4 ± 1.8 points against candidate58 on the same cases). The diagnosis traced the drop to the Validation section printing every open limit, several from unreliable generators. <code>candidate62</code> keeps at most two reliable open points there, leaves the rest to the writer, and keeps the cost changes. On the same panel it matched candidate58's quality within noise (score gain −1.3 ± 1.4 on Codex, +1.4 ± 2.2 on Claude Code) at much lower cost. The results on this page come from candidate62's full 3-replicate run.</p>
+</section>
+
+<section>
+<h2 id="cases">Per-case results</h2>
+<p>Each dot is one pull request: the graph's mean score minus the original's over three runs.</p>
 <figure><div class="fig-title">Codex: per-case score difference</div><div class="chart"><svg viewBox="0 0 760 150" role="img" aria-label="Codex: per-case score difference, graph minus original, for 61 cases">
 <line class="axis" x1="20.0" y1="24" x2="20.0" y2="122"/>
-<text x="20.0" y="138" text-anchor="middle" class="muted mono" font-size="11">-30</text>
+<text x="20.0" y="138" text-anchor="middle" class="muted mono" font-size="11">−30</text>
 <line class="axis" x1="140.0" y1="24" x2="140.0" y2="122"/>
-<text x="140.0" y="138" text-anchor="middle" class="muted mono" font-size="11">-20</text>
+<text x="140.0" y="138" text-anchor="middle" class="muted mono" font-size="11">−20</text>
 <line class="axis" x1="260.0" y1="24" x2="260.0" y2="122"/>
-<text x="260.0" y="138" text-anchor="middle" class="muted mono" font-size="11">-10</text>
+<text x="260.0" y="138" text-anchor="middle" class="muted mono" font-size="11">−10</text>
 <line class="axis strong" x1="380.0" y1="24" x2="380.0" y2="122"/>
-<text x="380.0" y="138" text-anchor="middle" class="muted mono" font-size="11">+0</text>
+<text x="380.0" y="138" text-anchor="middle" class="muted mono" font-size="11">0</text>
 <line class="axis" x1="500.0" y1="24" x2="500.0" y2="122"/>
 <text x="500.0" y="138" text-anchor="middle" class="muted mono" font-size="11">+10</text>
 <line class="axis" x1="620.0" y1="24" x2="620.0" y2="122"/>
 <text x="620.0" y="138" text-anchor="middle" class="muted mono" font-size="11">+20</text>
 <line class="axis" x1="740.0" y1="24" x2="740.0" y2="122"/>
 <text x="740.0" y="138" text-anchor="middle" class="muted mono" font-size="11">+30</text>
-<circle cx="132.6" cy="73.0" r="4" class="dot-m"><title>aifirstcli-tui-responsive: -20.6</title></circle>
-<circle cx="197.5" cy="73.0" r="4" class="dot-m"><title>showtail-signpath: -15.2</title></circle>
-<circle cx="273.9" cy="73.0" r="4" class="dot-m"><title>vexaim: -8.8</title></circle>
-<circle cx="293.0" cy="82.0" r="4" class="dot-m"><title>showtail-transcript-migrator: -7.2</title></circle>
-<circle cx="314.6" cy="73.0" r="4" class="dot-m"><title>aifirstcli-javafx-maven: -5.5</title></circle>
-<circle cx="314.8" cy="82.0" r="4" class="dot-m"><title>tracetoon-chained-runs: -5.4</title></circle>
-<circle cx="329.8" cy="73.0" r="4" class="dot-m"><title>tracetoon-update-command: -4.2</title></circle>
-<circle cx="331.3" cy="82.0" r="4" class="dot-m"><title>bazzite-stale-portal: -4.1</title></circle>
-<circle cx="336.9" cy="64.0" r="4" class="dot-m"><title>vexagent-skill: -3.6</title></circle>
-<circle cx="339.9" cy="91.0" r="4" class="dot-m"><title>tracetoon-brief-owners-rows: -3.3</title></circle>
-<circle cx="343.2" cy="55.0" r="4" class="dot-m"><title>prbench-judge-retry: -3.1</title></circle>
-<circle cx="357.0" cy="73.0" r="4" class="dot-m"><title>pr5: -1.9</title></circle>
-<circle cx="359.8" cy="82.0" r="4" class="dot-m"><title>tracetoon-sql-row-order: -1.7</title></circle>
-<circle cx="365.5" cy="64.0" r="4" class="dot-m"><title>tracetoon-evidence-graph: -1.2</title></circle>
-<circle cx="365.6" cy="91.0" r="4" class="dot-m"><title>prbench-shell-bookkeeping: -1.2</title></circle>
-<circle cx="371.2" cy="73.0" r="4" class="dot-m"><title>aifirstcli-book-walk: -0.7</title></circle>
-<circle cx="375.2" cy="82.0" r="4" class="dot-m"><title>vexagent-cli-snap: -0.4</title></circle>
-<circle cx="378.0" cy="64.0" r="4" class="dot-m"><title>aifirstcli-hooks-path: -0.2</title></circle>
-<circle cx="382.6" cy="91.0" r="4" class="dot-g"><title>pr11: +0.2</title></circle>
-<circle cx="389.1" cy="55.0" r="4" class="dot-g"><title>tracetoon-lean-reviewer: +0.8</title></circle>
-<circle cx="392.6" cy="73.0" r="4" class="dot-g"><title>aifirstcontent-portable-replays: +1.1</title></circle>
-<circle cx="395.2" cy="82.0" r="4" class="dot-g"><title>vexaim-workshop-norobot: +1.3</title></circle>
-<circle cx="395.4" cy="64.0" r="4" class="dot-g"><title>vexagent-replug-runs: +1.3</title></circle>
-<circle cx="406.5" cy="91.0" r="4" class="dot-g"><title>pr12: +2.2</title></circle>
-<circle cx="407.5" cy="55.0" r="4" class="dot-g"><title>showtail-claude-exit-codes: +2.3</title></circle>
-<circle cx="411.0" cy="100.0" r="4" class="dot-g"><title>tracetoon-review-run-all: +2.6</title></circle>
-<circle cx="414.3" cy="46.0" r="4" class="dot-g"><title>aifirstcli-duckling-wheels: +2.9</title></circle>
-<circle cx="414.9" cy="109.0" r="4" class="dot-g"><title>tracetoon-render-name-check: +2.9</title></circle>
-<circle cx="423.6" cy="73.0" r="4" class="dot-g"><title>showtail-windows-cmd: +3.6</title></circle>
-<circle cx="425.2" cy="82.0" r="4" class="dot-g"><title>aifirstcli-signpath-release: +3.8</title></circle>
-<circle cx="426.0" cy="64.0" r="4" class="dot-g"><title>vexaim-workshop-ci: +3.8</title></circle>
-<circle cx="429.2" cy="91.0" r="4" class="dot-g"><title>aifirstcli-showtail-harness: +4.1</title></circle>
-<circle cx="434.5" cy="55.0" r="4" class="dot-g"><title>showtail-self-upgrade: +4.5</title></circle>
-<circle cx="436.6" cy="100.0" r="4" class="dot-g"><title>prbench-parallel-providers: +4.7</title></circle>
-<circle cx="438.6" cy="46.0" r="4" class="dot-g"><title>winapps-adobe-2026: +4.9</title></circle>
-<circle cx="447.7" cy="73.0" r="4" class="dot-g"><title>tracetoon-receipt-quoting: +5.6</title></circle>
-<circle cx="447.9" cy="82.0" r="4" class="dot-g"><title>winapps-sdl-wayland: +5.7</title></circle>
-<circle cx="450.1" cy="64.0" r="4" class="dot-g"><title>aifirstcli-learner-replay-ux: +5.8</title></circle>
-<circle cx="453.1" cy="91.0" r="4" class="dot-g"><title>aifirstcli-homebrew-maven: +6.1</title></circle>
-<circle cx="456.9" cy="55.0" r="4" class="dot-g"><title>prbench-graph-compare-doc: +6.4</title></circle>
-<circle cx="462.8" cy="100.0" r="4" class="dot-g"><title>vex-v5-serial-aim-port: +6.9</title></circle>
-<circle cx="467.0" cy="73.0" r="4" class="dot-g"><title>showtail-docker-tests: +7.2</title></circle>
-<circle cx="472.2" cy="82.0" r="4" class="dot-g"><title>prbench-crossjudge: +7.7</title></circle>
-<circle cx="481.9" cy="64.0" r="4" class="dot-g"><title>pr10: +8.5</title></circle>
-<circle cx="489.6" cy="73.0" r="4" class="dot-g"><title>prbench-scoring: +9.1</title></circle>
-<circle cx="491.2" cy="82.0" r="4" class="dot-g"><title>aifirstcontent-replay-start-state: +9.3</title></circle>
-<circle cx="499.6" cy="64.0" r="4" class="dot-g"><title>pr8: +10.0</title></circle>
-<circle cx="507.3" cy="91.0" r="4" class="dot-g"><title>aifirstextension-apache-license: +10.6</title></circle>
-<circle cx="508.6" cy="55.0" r="4" class="dot-g"><title>pr9: +10.7</title></circle>
-<circle cx="509.1" cy="100.0" r="4" class="dot-g"><title>prbench-aggregate-only: +10.8</title></circle>
-<circle cx="515.6" cy="73.0" r="4" class="dot-g"><title>aifirstcontent-book-step-verify: +11.3</title></circle>
-<circle cx="521.5" cy="82.0" r="4" class="dot-g"><title>aifirstwebsite-guided-install: +11.8</title></circle>
-<circle cx="529.8" cy="64.0" r="4" class="dot-g"><title>tracetoon-cli-guard-tests: +12.5</title></circle>
-<circle cx="534.8" cy="91.0" r="4" class="dot-g"><title>tracetoon-neighborhood: +12.9</title></circle>
-<circle cx="563.6" cy="73.0" r="4" class="dot-g"><title>prbench-priced-cost-gate: +15.3</title></circle>
-<circle cx="564.1" cy="82.0" r="4" class="dot-g"><title>prbench-compare-systems: +15.3</title></circle>
-<circle cx="583.2" cy="64.0" r="4" class="dot-g"><title>aifirstwebsite-signing-policy: +16.9</title></circle>
-<circle cx="602.0" cy="73.0" r="4" class="dot-g"><title>aifirstcontent-apache: +18.5</title></circle>
-<circle cx="606.6" cy="82.0" r="4" class="dot-g"><title>aifirstcli-macos-installer: +18.9</title></circle>
-<circle cx="634.9" cy="73.0" r="4" class="dot-g"><title>vexagent-repl-usb-iface: +21.2</title></circle>
-<circle cx="702.1" cy="73.0" r="4" class="dot-g"><title>aifirstwebsite-macos-workaround: +26.8</title></circle>
-<text x="386.0" y="34" font-size="12" class="g-text">graph better: 43 of 61</text>
-<text x="374.0" y="34" font-size="12" text-anchor="end" class="m-text">original better: 18</text>
+<circle cx="147.6" cy="73.0" r="4" class="dot-m" aria-label="pr11: −19.4"/>
+<circle cx="171.3" cy="73.0" r="4" class="dot-m" aria-label="aifirstcli-tui-responsive: −17.4"/>
+<circle cx="196.6" cy="73.0" r="4" class="dot-m" aria-label="aifirstcli-showtail-harness: −15.3"/>
+<circle cx="229.9" cy="73.0" r="4" class="dot-m" aria-label="tracetoon-receipt-quoting: −12.5"/>
+<circle cx="257.6" cy="73.0" r="4" class="dot-m" aria-label="tracetoon-brief-owners-rows: −10.2"/>
+<circle cx="264.6" cy="82.0" r="4" class="dot-m" aria-label="tracetoon-sql-row-order: −9.6"/>
+<circle cx="278.1" cy="73.0" r="4" class="dot-m" aria-label="pr5: −8.5"/>
+<circle cx="285.9" cy="82.0" r="4" class="dot-m" aria-label="tracetoon-evidence-graph: −7.8"/>
+<circle cx="318.7" cy="73.0" r="4" class="dot-m" aria-label="bazzite-stale-portal: −5.1"/>
+<circle cx="319.2" cy="82.0" r="4" class="dot-m" aria-label="vexagent-skill: −5.1"/>
+<circle cx="330.6" cy="73.0" r="4" class="dot-m" aria-label="aifirstcli-duckling-wheels: −4.1"/>
+<circle cx="334.9" cy="82.0" r="4" class="dot-m" aria-label="tracetoon-chained-runs: −3.8"/>
+<circle cx="335.6" cy="64.0" r="4" class="dot-m" aria-label="aifirstcli-signpath-release: −3.7"/>
+<circle cx="344.5" cy="73.0" r="4" class="dot-m" aria-label="pr10: −3.0"/>
+<circle cx="346.8" cy="82.0" r="4" class="dot-m" aria-label="vexagent-cli-snap: −2.8"/>
+<circle cx="346.9" cy="64.0" r="4" class="dot-m" aria-label="vexagent-replug-runs: −2.8"/>
+<circle cx="351.2" cy="91.0" r="4" class="dot-m" aria-label="aifirstcli-javafx-maven: −2.4"/>
+<circle cx="353.1" cy="55.0" r="4" class="dot-m" aria-label="aifirstcli-hooks-path: −2.2"/>
+<circle cx="358.3" cy="100.0" r="4" class="dot-m" aria-label="aifirstcli-learner-replay-ux: −1.8"/>
+<circle cx="362.1" cy="46.0" r="4" class="dot-m" aria-label="vexaim-workshop-ci: −1.5"/>
+<circle cx="378.6" cy="73.0" r="4" class="dot-m" aria-label="pr9: −0.1"/>
+<circle cx="382.6" cy="82.0" r="4" class="dot-g" aria-label="vexaim: +0.2"/>
+<circle cx="385.4" cy="64.0" r="4" class="dot-g" aria-label="tracetoon-lean-reviewer: +0.5"/>
+<circle cx="389.8" cy="91.0" r="4" class="dot-g" aria-label="tracetoon-review-run-all: +0.8"/>
+<circle cx="394.6" cy="73.0" r="4" class="dot-g" aria-label="pr12: +1.2"/>
+<circle cx="397.9" cy="82.0" r="4" class="dot-g" aria-label="prbench-judge-retry: +1.5"/>
+<circle cx="412.6" cy="64.0" r="4" class="dot-g" aria-label="showtail-signpath: +2.7"/>
+<circle cx="413.5" cy="91.0" r="4" class="dot-g" aria-label="aifirstcontent-portable-replays: +2.8"/>
+<circle cx="414.7" cy="55.0" r="4" class="dot-g" aria-label="prbench-crossjudge: +2.9"/>
+<circle cx="417.2" cy="73.0" r="4" class="dot-g" aria-label="prbench-parallel-providers: +3.1"/>
+<circle cx="419.4" cy="82.0" r="4" class="dot-g" aria-label="vexaim-workshop-norobot: +3.3"/>
+<circle cx="437.1" cy="64.0" r="4" class="dot-g" aria-label="tracetoon-render-name-check: +4.8"/>
+<circle cx="439.2" cy="91.0" r="4" class="dot-g" aria-label="winapps-sdl-wayland: +4.9"/>
+<circle cx="440.2" cy="73.0" r="4" class="dot-g" aria-label="showtail-self-upgrade: +5.0"/>
+<circle cx="443.0" cy="82.0" r="4" class="dot-g" aria-label="showtail-transcript-migrator: +5.3"/>
+<circle cx="450.9" cy="64.0" r="4" class="dot-g" aria-label="pr8: +5.9"/>
+<circle cx="451.4" cy="91.0" r="4" class="dot-g" aria-label="aifirstcli-homebrew-maven: +6.0"/>
+<circle cx="462.2" cy="55.0" r="4" class="dot-g" aria-label="tracetoon-cli-guard-tests: +6.9"/>
+<circle cx="463.4" cy="100.0" r="4" class="dot-g" aria-label="showtail-claude-exit-codes: +7.0"/>
+<circle cx="469.4" cy="73.0" r="4" class="dot-g" aria-label="aifirstcontent-book-step-verify: +7.5"/>
+<circle cx="471.9" cy="82.0" r="4" class="dot-g" aria-label="prbench-shell-bookkeeping: +7.7"/>
+<circle cx="474.0" cy="64.0" r="4" class="dot-g" aria-label="prbench-scoring: +7.8"/>
+<circle cx="494.1" cy="73.0" r="4" class="dot-g" aria-label="showtail-docker-tests: +9.5"/>
+<circle cx="495.9" cy="82.0" r="4" class="dot-g" aria-label="aifirstextension-apache-license: +9.7"/>
+<circle cx="496.4" cy="64.0" r="4" class="dot-g" aria-label="prbench-aggregate-only: +9.7"/>
+<circle cx="498.2" cy="91.0" r="4" class="dot-g" aria-label="vexagent-repl-usb-iface: +9.9"/>
+<circle cx="505.0" cy="55.0" r="4" class="dot-g" aria-label="aifirstcontent-replay-start-state: +10.4"/>
+<circle cx="505.3" cy="100.0" r="4" class="dot-g" aria-label="vex-v5-serial-aim-port: +10.4"/>
+<circle cx="511.4" cy="46.0" r="4" class="dot-g" aria-label="tracetoon-update-command: +11.0"/>
+<circle cx="522.2" cy="73.0" r="4" class="dot-g" aria-label="aifirstcli-book-walk: +11.9"/>
+<circle cx="522.4" cy="82.0" r="4" class="dot-g" aria-label="aifirstwebsite-guided-install: +11.9"/>
+<circle cx="528.9" cy="64.0" r="4" class="dot-g" aria-label="prbench-graph-compare-doc: +12.4"/>
+<circle cx="529.5" cy="91.0" r="4" class="dot-g" aria-label="winapps-adobe-2026: +12.5"/>
+<circle cx="535.6" cy="55.0" r="4" class="dot-g" aria-label="showtail-windows-cmd: +13.0"/>
+<circle cx="538.4" cy="73.0" r="4" class="dot-g" aria-label="tracetoon-neighborhood: +13.2"/>
+<circle cx="564.1" cy="73.0" r="4" class="dot-g" aria-label="aifirstcontent-apache: +15.3"/>
+<circle cx="575.0" cy="82.0" r="4" class="dot-g" aria-label="prbench-priced-cost-gate: +16.3"/>
+<circle cx="576.2" cy="64.0" r="4" class="dot-g" aria-label="aifirstcli-macos-installer: +16.4"/>
+<circle cx="612.0" cy="73.0" r="4" class="dot-g" aria-label="aifirstwebsite-macos-workaround: +19.3"/>
+<circle cx="617.4" cy="82.0" r="4" class="dot-g" aria-label="aifirstwebsite-signing-policy: +19.8"/>
+<circle cx="618.7" cy="64.0" r="4" class="dot-g" aria-label="prbench-compare-systems: +19.9"/>
+<text x="386.0" y="34" font-size="12" class="g-text">graph better: 40 of 61</text>
+<text x="374.0" y="34" font-size="12" text-anchor="end" class="m-text">original better: 21</text>
 </svg></div>
 <div class="fig-title" style="margin-top:14px">Claude Code: per-case score difference</div><div class="chart"><svg viewBox="0 0 760 150" role="img" aria-label="Claude Code: per-case score difference, graph minus original, for 61 cases">
 <line class="axis" x1="20.0" y1="24" x2="20.0" y2="122"/>
-<text x="20.0" y="138" text-anchor="middle" class="muted mono" font-size="11">-30</text>
+<text x="20.0" y="138" text-anchor="middle" class="muted mono" font-size="11">−30</text>
 <line class="axis" x1="140.0" y1="24" x2="140.0" y2="122"/>
-<text x="140.0" y="138" text-anchor="middle" class="muted mono" font-size="11">-20</text>
+<text x="140.0" y="138" text-anchor="middle" class="muted mono" font-size="11">−20</text>
 <line class="axis" x1="260.0" y1="24" x2="260.0" y2="122"/>
-<text x="260.0" y="138" text-anchor="middle" class="muted mono" font-size="11">-10</text>
+<text x="260.0" y="138" text-anchor="middle" class="muted mono" font-size="11">−10</text>
 <line class="axis strong" x1="380.0" y1="24" x2="380.0" y2="122"/>
-<text x="380.0" y="138" text-anchor="middle" class="muted mono" font-size="11">+0</text>
+<text x="380.0" y="138" text-anchor="middle" class="muted mono" font-size="11">0</text>
 <line class="axis" x1="500.0" y1="24" x2="500.0" y2="122"/>
 <text x="500.0" y="138" text-anchor="middle" class="muted mono" font-size="11">+10</text>
 <line class="axis" x1="620.0" y1="24" x2="620.0" y2="122"/>
 <text x="620.0" y="138" text-anchor="middle" class="muted mono" font-size="11">+20</text>
 <line class="axis" x1="740.0" y1="24" x2="740.0" y2="122"/>
 <text x="740.0" y="138" text-anchor="middle" class="muted mono" font-size="11">+30</text>
-<circle cx="154.9" cy="73.0" r="4" class="dot-m"><title>aifirstcli-book-walk: -18.8</title></circle>
-<circle cx="192.0" cy="73.0" r="4" class="dot-m"><title>vexaim: -15.7</title></circle>
-<circle cx="209.0" cy="73.0" r="4" class="dot-m"><title>winapps-adobe-2026: -14.2</title></circle>
-<circle cx="249.7" cy="73.0" r="4" class="dot-m"><title>aifirstcli-learner-replay-ux: -10.9</title></circle>
-<circle cx="257.7" cy="82.0" r="4" class="dot-m"><title>vexagent-repl-usb-iface: -10.2</title></circle>
-<circle cx="270.3" cy="64.0" r="4" class="dot-m"><title>vexaim-workshop-ci: -9.1</title></circle>
-<circle cx="285.1" cy="73.0" r="4" class="dot-m"><title>tracetoon-neighborhood: -7.9</title></circle>
-<circle cx="295.5" cy="82.0" r="4" class="dot-m"><title>prbench-shell-bookkeeping: -7.0</title></circle>
-<circle cx="296.5" cy="73.0" r="4" class="dot-m"><title>showtail-self-upgrade: -7.0</title></circle>
-<circle cx="302.7" cy="82.0" r="4" class="dot-m"><title>pr12: -6.4</title></circle>
-<circle cx="306.7" cy="64.0" r="4" class="dot-m"><title>pr9: -6.1</title></circle>
-<circle cx="309.2" cy="91.0" r="4" class="dot-m"><title>aifirstextension-apache-license: -5.9</title></circle>
-<circle cx="315.6" cy="55.0" r="4" class="dot-m"><title>aifirstcli-tui-responsive: -5.4</title></circle>
-<circle cx="317.1" cy="100.0" r="4" class="dot-m"><title>aifirstwebsite-signing-policy: -5.2</title></circle>
-<circle cx="322.3" cy="73.0" r="4" class="dot-m"><title>tracetoon-chained-runs: -4.8</title></circle>
-<circle cx="325.0" cy="82.0" r="4" class="dot-m"><title>vexagent-replug-runs: -4.6</title></circle>
-<circle cx="325.5" cy="64.0" r="4" class="dot-m"><title>vexagent-skill: -4.5</title></circle>
-<circle cx="326.7" cy="91.0" r="4" class="dot-m"><title>bazzite-stale-portal: -4.4</title></circle>
-<circle cx="335.2" cy="55.0" r="4" class="dot-m"><title>tracetoon-evidence-graph: -3.7</title></circle>
-<circle cx="346.2" cy="73.0" r="4" class="dot-m"><title>pr5: -2.8</title></circle>
-<circle cx="351.3" cy="82.0" r="4" class="dot-m"><title>prbench-priced-cost-gate: -2.4</title></circle>
-<circle cx="358.2" cy="64.0" r="4" class="dot-m"><title>tracetoon-update-command: -1.8</title></circle>
-<circle cx="384.1" cy="73.0" r="4" class="dot-g"><title>aifirstcontent-book-step-verify: +0.3</title></circle>
-<circle cx="385.9" cy="82.0" r="4" class="dot-g"><title>prbench-aggregate-only: +0.5</title></circle>
-<circle cx="388.9" cy="64.0" r="4" class="dot-g"><title>vexaim-workshop-norobot: +0.7</title></circle>
-<circle cx="395.6" cy="73.0" r="4" class="dot-g"><title>prbench-judge-retry: +1.3</title></circle>
-<circle cx="399.6" cy="82.0" r="4" class="dot-g"><title>prbench-graph-compare-doc: +1.6</title></circle>
-<circle cx="402.4" cy="64.0" r="4" class="dot-g"><title>showtail-transcript-migrator: +1.9</title></circle>
-<circle cx="406.2" cy="91.0" r="4" class="dot-g"><title>tracetoon-receipt-quoting: +2.2</title></circle>
-<circle cx="417.3" cy="73.0" r="4" class="dot-g"><title>pr11: +3.1</title></circle>
-<circle cx="422.0" cy="82.0" r="4" class="dot-g"><title>tracetoon-render-name-check: +3.5</title></circle>
-<circle cx="426.8" cy="64.0" r="4" class="dot-g"><title>aifirstcli-hooks-path: +3.9</title></circle>
-<circle cx="436.2" cy="91.0" r="4" class="dot-g"><title>showtail-signpath: +4.7</title></circle>
-<circle cx="441.1" cy="73.0" r="4" class="dot-g"><title>aifirstcli-duckling-wheels: +5.1</title></circle>
-<circle cx="441.3" cy="82.0" r="4" class="dot-g"><title>prbench-scoring: +5.1</title></circle>
-<circle cx="453.3" cy="64.0" r="4" class="dot-g"><title>tracetoon-lean-reviewer: +6.1</title></circle>
-<circle cx="454.9" cy="91.0" r="4" class="dot-g"><title>showtail-docker-tests: +6.2</title></circle>
-<circle cx="459.0" cy="55.0" r="4" class="dot-g"><title>showtail-windows-cmd: +6.6</title></circle>
-<circle cx="467.1" cy="73.0" r="4" class="dot-g"><title>aifirstcli-signpath-release: +7.3</title></circle>
-<circle cx="470.4" cy="82.0" r="4" class="dot-g"><title>tracetoon-review-run-all: +7.5</title></circle>
-<circle cx="471.4" cy="64.0" r="4" class="dot-g"><title>pr10: +7.6</title></circle>
-<circle cx="473.8" cy="91.0" r="4" class="dot-g"><title>aifirstcli-macos-installer: +7.8</title></circle>
-<circle cx="477.0" cy="55.0" r="4" class="dot-g"><title>showtail-claude-exit-codes: +8.1</title></circle>
-<circle cx="481.0" cy="100.0" r="4" class="dot-g"><title>aifirstcontent-portable-replays: +8.4</title></circle>
-<circle cx="486.7" cy="46.0" r="4" class="dot-g"><title>aifirstwebsite-guided-install: +8.9</title></circle>
-<circle cx="507.6" cy="73.0" r="4" class="dot-g"><title>prbench-crossjudge: +10.6</title></circle>
-<circle cx="516.2" cy="73.0" r="4" class="dot-g"><title>prbench-compare-systems: +11.3</title></circle>
-<circle cx="522.9" cy="82.0" r="4" class="dot-g"><title>aifirstcontent-apache: +11.9</title></circle>
-<circle cx="527.1" cy="64.0" r="4" class="dot-g"><title>aifirstcli-javafx-maven: +12.3</title></circle>
-<circle cx="534.8" cy="91.0" r="4" class="dot-g"><title>tracetoon-sql-row-order: +12.9</title></circle>
-<circle cx="538.9" cy="73.0" r="4" class="dot-g"><title>aifirstwebsite-macos-workaround: +13.2</title></circle>
-<circle cx="554.8" cy="82.0" r="4" class="dot-g"><title>aifirstcli-showtail-harness: +14.6</title></circle>
-<circle cx="560.4" cy="73.0" r="4" class="dot-g"><title>aifirstcli-homebrew-maven: +15.0</title></circle>
-<circle cx="564.8" cy="82.0" r="4" class="dot-g"><title>vex-v5-serial-aim-port: +15.4</title></circle>
-<circle cx="566.0" cy="64.0" r="4" class="dot-g"><title>winapps-sdl-wayland: +15.5</title></circle>
-<circle cx="566.1" cy="91.0" r="4" class="dot-g"><title>aifirstcontent-replay-start-state: +15.5</title></circle>
-<circle cx="635.4" cy="73.0" r="4" class="dot-g"><title>pr8: +21.3</title></circle>
-<circle cx="662.8" cy="73.0" r="4" class="dot-g"><title>tracetoon-brief-owners-rows: +23.6</title></circle>
-<circle cx="677.2" cy="82.0" r="4" class="dot-g"><title>vexagent-cli-snap: +24.8</title></circle>
-<circle cx="685.6" cy="73.0" r="4" class="dot-g"><title>tracetoon-cli-guard-tests: +25.5</title></circle>
-<circle cx="695.8" cy="82.0" r="4" class="dot-g"><title>prbench-parallel-providers: +26.3</title></circle>
-<text x="386.0" y="34" font-size="12" class="g-text">graph better: 39 of 61</text>
-<text x="374.0" y="34" font-size="12" text-anchor="end" class="m-text">original better: 22</text>
+<circle cx="75.3" cy="73.0" r="4" class="dot-m" aria-label="vexaim: −25.4"/>
+<circle cx="156.2" cy="73.0" r="4" class="dot-m" aria-label="aifirstcontent-book-step-verify: −18.7"/>
+<circle cx="176.2" cy="73.0" r="4" class="dot-m" aria-label="bazzite-stale-portal: −17.0"/>
+<circle cx="227.5" cy="73.0" r="4" class="dot-m" aria-label="tracetoon-receipt-quoting: −12.7"/>
+<circle cx="238.3" cy="82.0" r="4" class="dot-m" aria-label="prbench-graph-compare-doc: −11.8"/>
+<circle cx="249.0" cy="73.0" r="4" class="dot-m" aria-label="aifirstcli-tui-responsive: −10.9"/>
+<circle cx="266.5" cy="82.0" r="4" class="dot-m" aria-label="pr12: −9.5"/>
+<circle cx="268.2" cy="64.0" r="4" class="dot-m" aria-label="vexaim-workshop-ci: −9.3"/>
+<circle cx="285.6" cy="73.0" r="4" class="dot-m" aria-label="vexaim-workshop-norobot: −7.9"/>
+<circle cx="296.0" cy="82.0" r="4" class="dot-m" aria-label="prbench-parallel-providers: −7.0"/>
+<circle cx="299.8" cy="73.0" r="4" class="dot-m" aria-label="vexagent-skill: −6.7"/>
+<circle cx="301.5" cy="82.0" r="4" class="dot-m" aria-label="showtail-self-upgrade: −6.5"/>
+<circle cx="329.4" cy="73.0" r="4" class="dot-m" aria-label="vexagent-replug-runs: −4.2"/>
+<circle cx="335.5" cy="82.0" r="4" class="dot-m" aria-label="aifirstcli-signpath-release: −3.7"/>
+<circle cx="345.2" cy="73.0" r="4" class="dot-m" aria-label="tracetoon-neighborhood: −2.9"/>
+<circle cx="351.7" cy="82.0" r="4" class="dot-m" aria-label="vexagent-repl-usb-iface: −2.4"/>
+<circle cx="353.1" cy="64.0" r="4" class="dot-m" aria-label="prbench-shell-bookkeeping: −2.2"/>
+<circle cx="369.3" cy="73.0" r="4" class="dot-m" aria-label="tracetoon-sql-row-order: −0.9"/>
+<circle cx="380.6" cy="82.0" r="4" class="dot-g" aria-label="showtail-signpath: +0.1"/>
+<circle cx="384.3" cy="64.0" r="4" class="dot-g" aria-label="prbench-aggregate-only: +0.4"/>
+<circle cx="384.8" cy="91.0" r="4" class="dot-g" aria-label="aifirstcli-learner-replay-ux: +0.4"/>
+<circle cx="388.9" cy="55.0" r="4" class="dot-g" aria-label="showtail-windows-cmd: +0.7"/>
+<circle cx="392.1" cy="73.0" r="4" class="dot-g" aria-label="tracetoon-cli-guard-tests: +1.0"/>
+<circle cx="397.9" cy="82.0" r="4" class="dot-g" aria-label="aifirstcli-duckling-wheels: +1.5"/>
+<circle cx="398.1" cy="64.0" r="4" class="dot-g" aria-label="prbench-priced-cost-gate: +1.5"/>
+<circle cx="398.4" cy="91.0" r="4" class="dot-g" aria-label="showtail-transcript-migrator: +1.5"/>
+<circle cx="403.3" cy="55.0" r="4" class="dot-g" aria-label="aifirstcli-hooks-path: +1.9"/>
+<circle cx="405.2" cy="100.0" r="4" class="dot-g" aria-label="pr5: +2.1"/>
+<circle cx="408.1" cy="46.0" r="4" class="dot-g" aria-label="aifirstcontent-portable-replays: +2.3"/>
+<circle cx="419.6" cy="73.0" r="4" class="dot-g" aria-label="aifirstcli-book-walk: +3.3"/>
+<circle cx="421.2" cy="82.0" r="4" class="dot-g" aria-label="showtail-claude-exit-codes: +3.4"/>
+<circle cx="436.9" cy="64.0" r="4" class="dot-g" aria-label="pr10: +4.7"/>
+<circle cx="438.7" cy="91.0" r="4" class="dot-g" aria-label="tracetoon-chained-runs: +4.9"/>
+<circle cx="439.2" cy="55.0" r="4" class="dot-g" aria-label="tracetoon-lean-reviewer: +4.9"/>
+<circle cx="442.0" cy="73.0" r="4" class="dot-g" aria-label="pr9: +5.2"/>
+<circle cx="446.4" cy="82.0" r="4" class="dot-g" aria-label="tracetoon-update-command: +5.5"/>
+<circle cx="446.7" cy="64.0" r="4" class="dot-g" aria-label="prbench-judge-retry: +5.6"/>
+<circle cx="448.5" cy="91.0" r="4" class="dot-g" aria-label="prbench-crossjudge: +5.7"/>
+<circle cx="456.6" cy="55.0" r="4" class="dot-g" aria-label="winapps-adobe-2026: +6.4"/>
+<circle cx="460.5" cy="100.0" r="4" class="dot-g" aria-label="showtail-docker-tests: +6.7"/>
+<circle cx="469.8" cy="73.0" r="4" class="dot-g" aria-label="aifirstwebsite-signing-policy: +7.5"/>
+<circle cx="476.0" cy="82.0" r="4" class="dot-g" aria-label="pr11: +8.0"/>
+<circle cx="484.6" cy="64.0" r="4" class="dot-g" aria-label="aifirstwebsite-guided-install: +8.7"/>
+<circle cx="489.8" cy="73.0" r="4" class="dot-g" aria-label="aifirstcontent-replay-start-state: +9.2"/>
+<circle cx="492.6" cy="82.0" r="4" class="dot-g" aria-label="tracetoon-evidence-graph: +9.4"/>
+<circle cx="514.8" cy="73.0" r="4" class="dot-g" aria-label="vexagent-cli-snap: +11.2"/>
+<circle cx="516.8" cy="82.0" r="4" class="dot-g" aria-label="aifirstcli-macos-installer: +11.4"/>
+<circle cx="536.2" cy="73.0" r="4" class="dot-g" aria-label="aifirstcli-showtail-harness: +13.0"/>
+<circle cx="536.5" cy="82.0" r="4" class="dot-g" aria-label="winapps-sdl-wayland: +13.0"/>
+<circle cx="536.8" cy="64.0" r="4" class="dot-g" aria-label="prbench-scoring: +13.1"/>
+<circle cx="544.6" cy="91.0" r="4" class="dot-g" aria-label="tracetoon-review-run-all: +13.7"/>
+<circle cx="549.4" cy="55.0" r="4" class="dot-g" aria-label="tracetoon-render-name-check: +14.1"/>
+<circle cx="575.7" cy="73.0" r="4" class="dot-g" aria-label="aifirstcli-homebrew-maven: +16.3"/>
+<circle cx="584.2" cy="73.0" r="4" class="dot-g" aria-label="aifirstwebsite-macos-workaround: +17.0"/>
+<circle cx="584.5" cy="82.0" r="4" class="dot-g" aria-label="prbench-compare-systems: +17.0"/>
+<circle cx="593.2" cy="64.0" r="4" class="dot-g" aria-label="vex-v5-serial-aim-port: +17.8"/>
+<circle cx="605.4" cy="91.0" r="4" class="dot-g" aria-label="tracetoon-brief-owners-rows: +18.8"/>
+<circle cx="607.0" cy="55.0" r="4" class="dot-g" aria-label="pr8: +18.9"/>
+<circle cx="614.7" cy="73.0" r="4" class="dot-g" aria-label="aifirstcli-javafx-maven: +19.6"/>
+<circle cx="635.0" cy="73.0" r="4" class="dot-g" aria-label="aifirstextension-apache-license: +21.3"/>
+<circle cx="635.6" cy="82.0" r="4" class="dot-g" aria-label="aifirstcontent-apache: +21.3"/>
+<text x="386.0" y="34" font-size="12" class="g-text">graph better: 43 of 61</text>
+<text x="374.0" y="34" font-size="12" text-anchor="end" class="m-text">original better: 18</text>
 </svg></div>
-<figcaption>Hover a dot for the case name. Per-case differences are noisy (three runs each); the pooled results above are the measure. The full list is in the appendix.</figcaption></figure>
+<figcaption>Per-case differences are noisy (three runs each); the pooled results above are the measure. The full list is in the appendix.</figcaption></figure>
+</section>
 
-<h2 id="method">How we tested</h2>
+<section>
+<h2 id="caveats">Method and caveats</h2>
 <div class="two">
-  <div class="card"><h4>The cases</h4><ul>
+  <div class="card"><h4>Setup</h4><ul>
     <li><b>61 real pull requests</b> from 12 repositories: Tracetoon (17), AI First CLI (10), prbench (9), Showtail (6), AI First content (4), VEX AIM agent (4), AI First website (3), VEX AIM workshop (3), VEX V5 serial (1), WinApps (2), AI First extension (1), Bazzite login (1).</li>
-    <li>Each comes with the original agent session logs that produced it: 33 from Claude Code, 28 from Codex.</li>
-    <li>Each has an <b>expert-reviewed fact sheet</b>: the claims a good description should convey, the context a reviewer needs, what the evidence does not establish, and plausible-but-wrong traps. Sheets were drafted from the diff and logs, reviewed by a six-model panel (three Claude Opus 5.5, three GPT-6.1 Sol), and disputes were settled by debates judged by Fable 5.1 and GPT-6 Astra.</li>
+    <li>Session logs: 33 from Claude Code, 28 from Codex.</li>
+    <li>Both workflows wrote every PR <b>three times</b> with the same model, prompt and sandbox; they differ only in the installed Tracetoon skill.</li>
+    <li>Writers: GPT-6.1 Terra (medium) in the Codex CLI and Claude Sonnet 5.5 (medium) in Claude Code 2.1.319. Reviewers in the graph workflow: Luna 6 and Haiku 5.5 at xhigh.</li>
+    <li>Two pre-registered judges per provider, both orders. Tracetoon build candidate62 (Tracetoon 8d9783f). Harness: prbench bench-v4 (writer side f4f7139), 61 cases x 3 replicates, pre-registered judge pairs, original-workflow drafts reused from the 2026-11-16 run (diagnostic purpose); the open <a href="https://github.com/Tingsters/prbench">prbench</a> harness.</li>
   </ul></div>
-  <div class="card"><h4>The runs</h4><ul>
-    <li>Both workflows wrote every PR <b>three times</b> with the same model, prompt and sandbox. They differ only in the installed Tracetoon skill.</li>
-    <li><b>Two judges per provider</b> (Codex: GPT-6.1 Sol and Terra; Claude: Opus 5.5 and Sonnet 5.5), each in both orders, fixed before the run.</li>
-    <li>Every factual error a judge flagged was <b>checked against the evidence</b> by Fable 5.1 and GPT-6 Astra (Fable settles disagreements): 472 flags, none left unresolved.</li>
-    <li>Run with the open <a href="https://github.com/Tingsters/prbench">prbench</a> harness under its confirmation protocol.</li>
+  <div class="card"><h4>What to keep in mind</h4><ul>
+    <li><b>Tuned on part of the pool.</b> After the first 61-PR run, the brief was tuned over four rounds on 25 of these cases (the 20 where it had lost most, plus 5 controls). On the 36 untouched cases the score difference is +3.4 (Codex) and +4.0 (Claude Code); on the 25 tuned cases +3.1 and +2.7. Picks on the untouched cases: 51–21 (Codex) and 42–11 (Claude Code).</li>
+    <li><b>Build chosen on a full-pool panel.</b> candidate62 was chosen after a one-replicate panel on all 61 cases, and that panel's drafts are the first of this run's three replicates. The fixes behind it were generic (no case names), but the choice itself used this pool.</li>
+    <li><b>Single-judge tuning rounds.</b> A harness bug passed only the last of the two judges during tuning, so rounds 1–4 were scored by one judge per provider. This final run is scored by both pre-registered judges.</li>
+    <li><b>Reused drafts.</b> The original workflow's 183 drafts per provider come from the first 61-PR run; only the graph's drafts are new. Same models, harness, sandbox and judges.</li>
+    <li><b>No held-out set.</b> All 61 cases form one pool used both to tune and to evaluate. An earlier sealed held-out split was used once; that run found errors (statements that no request or test was recorded) which the current build fixes. We then chose a larger single pool over repeated small held-out sets.</li>
   </ul></div>
 </div>
-
-<h2 id="disclosures">Run details and disclosures</h2>
-<div class="callout w"><p><b>Our own adoption gate.</b> Before testing we fixed four criteria per provider: the score's lower 95% bound at least −2.5, expert-confirmed factual errors not worse by more than 0.05 per PR, cost at most 0.8×, and key-fact coverage not lower by more than 0.05. Codex met 3 of 4 (missed: errors not worse by more than 0.05 per PR; confirmed errors 0.26 vs 0.22 per PR, difference interval up to +0.186). Claude Code met 3 of 4 (missed: errors not worse by more than 0.05 per PR; confirmed errors 0.68 vs 0.81 per PR, difference interval up to +0.093).</p></div>
+<h3 id="accuracy">Accuracy: expert-confirmed factual errors</h3><p>Every factual error a judge flagged was re-checked against the evidence by two expert models, and only confirmed errors count here. The rate is per graph or original draft, over all 183 drafts per provider, with a 95% interval over cases.</p><ul><li><b>Codex:</b> 0.33 confirmed factual errors per draft (61/183) with the graph vs 0.16 (30/183) for the original; difference +0.17 [0.00, +0.36]. This <b>fails</b> our strict non-inferiority gate, which needs the upper bound at or below +0.05.</li><li><b>Claude Code:</b> 0.47 confirmed factual errors per draft (86/183) with the graph vs 0.84 (154/183) for the original; difference −0.37 [−0.58, −0.15]. This passes our strict non-inferiority gate (upper bound at or below +0.05).</li></ul><p><b>What drives the Codex errors.</b> About a third are in the Validation section, which Tracetoon generates rather than the writer. Two render bugs cause most of them. The line saying the session's last test run came before the final edits fires even when the edit and the test ran in one chained command, edit first. And checks are labelled as run on the submitted content when an earlier step had regenerated files in the tree they ran on. The rest are in the prose, mostly sentences broader than the code supports, such as calling every changed test fake-only or crediting the wrong function. These causes are known and being fixed.</p>
+<div class="callout w"><p><b>Our own adoption gate.</b> Before testing we fixed four criteria per provider: the score's lower 95% bound at least −2.5, expert-confirmed factual errors not worse by more than 0.05 per draft (the upper 95% bound of the difference), cost at most 0.8×, and key-fact coverage not lower by more than 0.05. Codex met 3 of 4 (missed: errors not worse by more than 0.05 per draft; confirmed errors 0.33 vs 0.16 per draft, difference interval up to +0.36). Claude Code met 4 of 4.</p></div>
 <ul>
-  <li><b>Tuned on part of the pool.</b> After a first 61-PR run, the brief was tuned over four rounds on 25 of these cases (the 20 where it had lost most, plus 5 controls). On the 36 cases never used for tuning the score difference is +5.1 (Codex) and +2.6 (Claude Code); on the 25 tuned cases +3.1 and +5.0. Judges' picks on the untouched cases: 51–14 (Codex) and 43–11 (Claude Code). Tuning rounds were scored by one judge per provider (GPT-6.1 Terra for Codex, Sonnet 5.5 for Claude Code); this final run is scored by both pre-registered judges. The first run, before tuning, measured +2.7 (Codex) and +0.8 (Claude Code).</li>
-  <li><b>Reused drafts.</b> The original workflow's 183 drafts per provider were written in that first run and reused here; only the graph's drafts are new. Same models, harness, sandbox and judges.</li>
-  <li><b>No held-out set.</b> All 61 cases form one pool used both to tune Tracetoon and to evaluate it. Earlier, a sealed held-out split was used once; that run found errors (statements that no request or test was recorded) which the current build fixes. We then chose a larger single pool over repeated small held-out sets.</li>
-  <li><b>Judges disagree often.</b> Agreement between the two judges was 77% (Cohen's κ 0.61) on Codex and 57% (κ 0.33) on Claude Code. We report the picks where both judges agree as the headline measure. The Codex judges include GPT-6.1 Terra, the same model as the Codex writer in both workflows.</li>
-  <li><b>Uncertainties on Claude Code.</b> Graph drafts on Claude Code respected fewer of the fact sheets' uncertainties (58% vs 65%). This is the main open quality gap.</li>
-  <li><b>Wall time.</b> On Claude Code the graph workflow took about 1.6× as long per PR; on Codex it was about the same (1.11×).</li>
+  <li><b>Judges disagree often.</b> Agreement between the two judges was 69% (Cohen's κ 0.50) on Codex and 52% (κ 0.27) on Claude Code, which is why we lead with picks both judges agree on. The Codex judges include GPT-6.1 Terra, the same model as the Codex writer in both workflows; judges and writers are always from the same provider family.</li>
+  <li><b>Uncertainties and wall time on Claude Code.</b> Claude graph drafts respected fewer uncertainties (57% vs 66%) and took about 1.6× as long per PR; on Codex wall time was 1.06×.</li>
   <li><b>Sandbox validation.</b> Writers ran tests in an offline sandbox. 31 of 61 cases' test suites pass there at the PR's final commit; the rest fail for host reasons or have no test command. Both workflows saw the same environment.</li>
-  <li><b>Compared with our earlier 5-PR report.</b> That report measured 35% lower cost on Codex and 41% on Claude Code. On 61 PRs the Codex saving grew (46%) and the Claude Code saving is smaller (31%); since then the graph workflow added fresh checks and a review pass to fix accuracy. The earlier score gains came from 5 PRs; this run uses 61.</li>
-  <li><b>Models and versions.</b> Writers: GPT-6.1 Terra (medium effort) in the Codex CLI and Claude Sonnet 5.5 (medium) in Claude Code 2.1.319. Tracetoon build candidate58 (Tracetoon 160b49f); baseline is Tracetoon's original multi-agent workflow. Harness: prbench bench-v4 (writer side f4f7139), 61 cases x 3 replicates, pre-registered judge pairs, original-workflow drafts reused from the 2026-11-16 run (diagnostic purpose).</li>
+  <li><b>Compared with our earlier 5-PR report.</b> That report measured +3.5 and 35% lower cost on Codex, and +5.2 and 41% on Claude Code, on 5 PRs from one repository. On 61 PRs the Codex saving grew (70%) and the Claude Code saving grew (43%); since then the graph workflow added fresh checks and a review pass to fix accuracy.</li>
+  <li><b>The example.</b> The three-way drafts come from a separate one-replicate run on one case; the agent-alone cost is an estimate.</li>
 </ul>
+</section>
 
+<section>
 <h2 id="appendix">Appendix: data</h2>
-<h3>Score components (mean per judgment)</h3>
-<div class="tbl"><table><thead><tr><th>Measure</th><th class="n">Codex original</th><th class="n">Codex graph</th><th class="n">Claude original</th><th class="n">Claude graph</th></tr></thead><tbody>
-<tr><td>Key facts conveyed (claim coverage)</td><td class="n">72%</td><td class="n better">82%</td><td class="n">76%</td><td class="n worse">75%</td></tr>
-<tr><td>Context conveyed</td><td class="n">29%</td><td class="n better">32%</td><td class="n">26%</td><td class="n better">33%</td></tr>
-<tr><td>Uncertainties respected</td><td class="n">99%</td><td class="n ">99%</td><td class="n">65%</td><td class="n worse">58%</td></tr>
-<tr><td>Reviewer rubric (share of max)</td><td class="n">84%</td><td class="n better">87%</td><td class="n">71%</td><td class="n better">79%</td></tr>
-<tr><td>Factual errors per judgment</td><td class="n">0.12</td><td class="n worse">0.15</td><td class="n">0.30</td><td class="n better">0.20</td></tr>
-<tr><td>Unsupported claims per judgment</td><td class="n">0.01</td><td class="n worse">0.03</td><td class="n">0.12</td><td class="n worse">0.16</td></tr>
-<tr><td>Traps hit per judgment</td><td class="n">0.01</td><td class="n ">0.01</td><td class="n">0.03</td><td class="n worse">0.04</td></tr>
-<tr><td>Cost per PR</td><td class="n">$0.447</td><td class="n better">$0.225</td><td class="n">$0.654</td><td class="n better">$0.415</td></tr>
-</tbody></table></div>
 <h3>Judge preference</h3>
 <div class="tbl"><table><thead><tr><th>Provider · judge</th><th class="n">Graph wins</th><th class="n">Original wins</th><th class="n">Graph share</th><th class="n">95% interval</th></tr></thead><tbody>
-<tr><td>Codex · gpt-6.1-sol</td><td class="n">96</td><td class="n">48</td><td class="n">67%</td><td class="n">57%–76%</td></tr><tr><td>Codex · gpt-6.1-terra</td><td class="n">103</td><td class="n">46</td><td class="n">69%</td><td class="n">60%–78%</td></tr><tr><td>Codex · both judges agree</td><td class="n">83</td><td class="n">34</td><td class="n">71%</td><td class="n">61%–80%</td></tr><tr><td>Claude Code · claude-opus-5-5</td><td class="n">112</td><td class="n">40</td><td class="n">74%</td><td class="n">65%–81%</td></tr><tr><td>Claude Code · claude-sonnet-5-5</td><td class="n">80</td><td class="n">29</td><td class="n">73%</td><td class="n">63%–82%</td></tr><tr><td>Claude Code · both judges agree</td><td class="n">69</td><td class="n">17</td><td class="n">80%</td><td class="n">71%–88%</td></tr>
+<tr><td>Codex · gpt-6.1-sol</td><td class="n">91</td><td class="n">51</td><td class="n">64%</td><td class="n">53%–75%</td></tr><tr><td>Codex · gpt-6.1-terra</td><td class="n">105</td><td class="n">47</td><td class="n">69%</td><td class="n">60%–78%</td></tr><tr><td>Codex · both judges agree</td><td class="n">79</td><td class="n">38</td><td class="n">68%</td><td class="n">56%–79%</td></tr><tr><td>Claude Code · claude-opus-5-5</td><td class="n">106</td><td class="n">52</td><td class="n">67%</td><td class="n">58%–76%</td></tr><tr><td>Claude Code · claude-sonnet-5-5</td><td class="n">68</td><td class="n">27</td><td class="n">72%</td><td class="n">60%–83%</td></tr><tr><td>Claude Code · both judges agree</td><td class="n">60</td><td class="n">21</td><td class="n">74%</td><td class="n">62%–85%</td></tr>
 </tbody></table></div>
 <h3>Expert-checked factual errors</h3>
 <div class="tbl"><table><thead><tr><th>Provider</th><th class="n">Graph: confirmed / flagged</th><th class="n">Original: confirmed / flagged</th><th class="n">Per PR (graph vs original)</th></tr></thead><tbody>
-<tr><td>Codex</td><td class="n">47 / 69</td><td class="n">40 / 57</td><td class="n">0.26 vs 0.22</td></tr>
-<tr><td>Claude Code</td><td class="n">124 / 164</td><td class="n">148 / 182</td><td class="n">0.68 vs 0.81</td></tr>
+<tr><td>Codex</td><td class="n">61 / 81</td><td class="n">30 / 47</td><td class="n">0.33 vs 0.16</td></tr>
+<tr><td>Claude Code</td><td class="n">86 / 119</td><td class="n">154 / 187</td><td class="n">0.47 vs 0.84</td></tr>
 </tbody></table></div>
 <details><summary>Per-case score differences (all 61)</summary><div class="tbl"><table><thead><tr><th>Case</th><th class="n">Codex Δ</th><th class="n">Claude Δ</th></tr></thead><tbody>
-<tr><td class="mono-s">aifirstcli-book-walk</td><td class="n worse">-0.7</td><td class="n worse">-18.8</td></tr>
-<tr><td class="mono-s">aifirstcli-duckling-wheels</td><td class="n better">+2.9</td><td class="n better">+5.1</td></tr>
-<tr><td class="mono-s">aifirstcli-homebrew-maven</td><td class="n better">+6.1</td><td class="n better">+15.0</td></tr>
-<tr><td class="mono-s">aifirstcli-hooks-path</td><td class="n worse">-0.2</td><td class="n better">+3.9</td></tr>
-<tr><td class="mono-s">aifirstcli-javafx-maven</td><td class="n worse">-5.5</td><td class="n better">+12.3</td></tr>
-<tr><td class="mono-s">aifirstcli-learner-replay-ux</td><td class="n better">+5.8</td><td class="n worse">-10.9</td></tr>
-<tr><td class="mono-s">aifirstcli-macos-installer</td><td class="n better">+18.9</td><td class="n better">+7.8</td></tr>
-<tr><td class="mono-s">aifirstcli-showtail-harness</td><td class="n better">+4.1</td><td class="n better">+14.6</td></tr>
-<tr><td class="mono-s">aifirstcli-signpath-release</td><td class="n better">+3.8</td><td class="n better">+7.3</td></tr>
-<tr><td class="mono-s">aifirstcli-tui-responsive</td><td class="n worse">-20.6</td><td class="n worse">-5.4</td></tr>
-<tr><td class="mono-s">aifirstcontent-apache</td><td class="n better">+18.5</td><td class="n better">+11.9</td></tr>
-<tr><td class="mono-s">aifirstcontent-book-step-verify</td><td class="n better">+11.3</td><td class="n better">+0.3</td></tr>
-<tr><td class="mono-s">aifirstcontent-portable-replays</td><td class="n better">+1.1</td><td class="n better">+8.4</td></tr>
-<tr><td class="mono-s">aifirstcontent-replay-start-state</td><td class="n better">+9.3</td><td class="n better">+15.5</td></tr>
-<tr><td class="mono-s">aifirstextension-apache-license</td><td class="n better">+10.6</td><td class="n worse">-5.9</td></tr>
-<tr><td class="mono-s">aifirstwebsite-guided-install</td><td class="n better">+11.8</td><td class="n better">+8.9</td></tr>
-<tr><td class="mono-s">aifirstwebsite-macos-workaround</td><td class="n better">+26.8</td><td class="n better">+13.2</td></tr>
-<tr><td class="mono-s">aifirstwebsite-signing-policy</td><td class="n better">+16.9</td><td class="n worse">-5.2</td></tr>
-<tr><td class="mono-s">bazzite-stale-portal</td><td class="n worse">-4.1</td><td class="n worse">-4.4</td></tr>
-<tr><td class="mono-s">pr10</td><td class="n better">+8.5</td><td class="n better">+7.6</td></tr>
-<tr><td class="mono-s">pr11</td><td class="n better">+0.2</td><td class="n better">+3.1</td></tr>
-<tr><td class="mono-s">pr12</td><td class="n better">+2.2</td><td class="n worse">-6.4</td></tr>
-<tr><td class="mono-s">pr5</td><td class="n worse">-1.9</td><td class="n worse">-2.8</td></tr>
-<tr><td class="mono-s">pr8</td><td class="n better">+10.0</td><td class="n better">+21.3</td></tr>
-<tr><td class="mono-s">pr9</td><td class="n better">+10.7</td><td class="n worse">-6.1</td></tr>
-<tr><td class="mono-s">prbench-aggregate-only</td><td class="n better">+10.8</td><td class="n better">+0.5</td></tr>
-<tr><td class="mono-s">prbench-compare-systems</td><td class="n better">+15.3</td><td class="n better">+11.3</td></tr>
-<tr><td class="mono-s">prbench-crossjudge</td><td class="n better">+7.7</td><td class="n better">+10.6</td></tr>
-<tr><td class="mono-s">prbench-graph-compare-doc</td><td class="n better">+6.4</td><td class="n better">+1.6</td></tr>
-<tr><td class="mono-s">prbench-judge-retry</td><td class="n worse">-3.1</td><td class="n better">+1.3</td></tr>
-<tr><td class="mono-s">prbench-parallel-providers</td><td class="n better">+4.7</td><td class="n better">+26.3</td></tr>
-<tr><td class="mono-s">prbench-priced-cost-gate</td><td class="n better">+15.3</td><td class="n worse">-2.4</td></tr>
-<tr><td class="mono-s">prbench-scoring</td><td class="n better">+9.1</td><td class="n better">+5.1</td></tr>
-<tr><td class="mono-s">prbench-shell-bookkeeping</td><td class="n worse">-1.2</td><td class="n worse">-7.0</td></tr>
-<tr><td class="mono-s">showtail-claude-exit-codes</td><td class="n better">+2.3</td><td class="n better">+8.1</td></tr>
-<tr><td class="mono-s">showtail-docker-tests</td><td class="n better">+7.2</td><td class="n better">+6.2</td></tr>
-<tr><td class="mono-s">showtail-self-upgrade</td><td class="n better">+4.5</td><td class="n worse">-7.0</td></tr>
-<tr><td class="mono-s">showtail-signpath</td><td class="n worse">-15.2</td><td class="n better">+4.7</td></tr>
-<tr><td class="mono-s">showtail-transcript-migrator</td><td class="n worse">-7.2</td><td class="n better">+1.9</td></tr>
-<tr><td class="mono-s">showtail-windows-cmd</td><td class="n better">+3.6</td><td class="n better">+6.6</td></tr>
-<tr><td class="mono-s">tracetoon-brief-owners-rows</td><td class="n worse">-3.3</td><td class="n better">+23.6</td></tr>
-<tr><td class="mono-s">tracetoon-chained-runs</td><td class="n worse">-5.4</td><td class="n worse">-4.8</td></tr>
-<tr><td class="mono-s">tracetoon-cli-guard-tests</td><td class="n better">+12.5</td><td class="n better">+25.5</td></tr>
-<tr><td class="mono-s">tracetoon-evidence-graph</td><td class="n worse">-1.2</td><td class="n worse">-3.7</td></tr>
-<tr><td class="mono-s">tracetoon-lean-reviewer</td><td class="n better">+0.8</td><td class="n better">+6.1</td></tr>
-<tr><td class="mono-s">tracetoon-neighborhood</td><td class="n better">+12.9</td><td class="n worse">-7.9</td></tr>
-<tr><td class="mono-s">tracetoon-receipt-quoting</td><td class="n better">+5.6</td><td class="n better">+2.2</td></tr>
-<tr><td class="mono-s">tracetoon-render-name-check</td><td class="n better">+2.9</td><td class="n better">+3.5</td></tr>
-<tr><td class="mono-s">tracetoon-review-run-all</td><td class="n better">+2.6</td><td class="n better">+7.5</td></tr>
-<tr><td class="mono-s">tracetoon-sql-row-order</td><td class="n worse">-1.7</td><td class="n better">+12.9</td></tr>
-<tr><td class="mono-s">tracetoon-update-command</td><td class="n worse">-4.2</td><td class="n worse">-1.8</td></tr>
-<tr><td class="mono-s">vex-v5-serial-aim-port</td><td class="n better">+6.9</td><td class="n better">+15.4</td></tr>
-<tr><td class="mono-s">vexagent-cli-snap</td><td class="n worse">-0.4</td><td class="n better">+24.8</td></tr>
-<tr><td class="mono-s">vexagent-repl-usb-iface</td><td class="n better">+21.2</td><td class="n worse">-10.2</td></tr>
-<tr><td class="mono-s">vexagent-replug-runs</td><td class="n better">+1.3</td><td class="n worse">-4.6</td></tr>
-<tr><td class="mono-s">vexagent-skill</td><td class="n worse">-3.6</td><td class="n worse">-4.5</td></tr>
-<tr><td class="mono-s">vexaim</td><td class="n worse">-8.8</td><td class="n worse">-15.7</td></tr>
-<tr><td class="mono-s">vexaim-workshop-ci</td><td class="n better">+3.8</td><td class="n worse">-9.1</td></tr>
-<tr><td class="mono-s">vexaim-workshop-norobot</td><td class="n better">+1.3</td><td class="n better">+0.7</td></tr>
-<tr><td class="mono-s">winapps-adobe-2026</td><td class="n better">+4.9</td><td class="n worse">-14.2</td></tr>
-<tr><td class="mono-s">winapps-sdl-wayland</td><td class="n better">+5.7</td><td class="n better">+15.5</td></tr>
+<tr><td class="mono-s">aifirstcli-book-walk</td><td class="n better">+11.9</td><td class="n better">+3.3</td></tr>
+<tr><td class="mono-s">aifirstcli-duckling-wheels</td><td class="n worse">−4.1</td><td class="n better">+1.5</td></tr>
+<tr><td class="mono-s">aifirstcli-homebrew-maven</td><td class="n better">+6.0</td><td class="n better">+16.3</td></tr>
+<tr><td class="mono-s">aifirstcli-hooks-path</td><td class="n worse">−2.2</td><td class="n better">+1.9</td></tr>
+<tr><td class="mono-s">aifirstcli-javafx-maven</td><td class="n worse">−2.4</td><td class="n better">+19.6</td></tr>
+<tr><td class="mono-s">aifirstcli-learner-replay-ux</td><td class="n worse">−1.8</td><td class="n better">+0.4</td></tr>
+<tr><td class="mono-s">aifirstcli-macos-installer</td><td class="n better">+16.4</td><td class="n better">+11.4</td></tr>
+<tr><td class="mono-s">aifirstcli-showtail-harness</td><td class="n worse">−15.3</td><td class="n better">+13.0</td></tr>
+<tr><td class="mono-s">aifirstcli-signpath-release</td><td class="n worse">−3.7</td><td class="n worse">−3.7</td></tr>
+<tr><td class="mono-s">aifirstcli-tui-responsive</td><td class="n worse">−17.4</td><td class="n worse">−10.9</td></tr>
+<tr><td class="mono-s">aifirstcontent-apache</td><td class="n better">+15.3</td><td class="n better">+21.3</td></tr>
+<tr><td class="mono-s">aifirstcontent-book-step-verify</td><td class="n better">+7.5</td><td class="n worse">−18.7</td></tr>
+<tr><td class="mono-s">aifirstcontent-portable-replays</td><td class="n better">+2.8</td><td class="n better">+2.3</td></tr>
+<tr><td class="mono-s">aifirstcontent-replay-start-state</td><td class="n better">+10.4</td><td class="n better">+9.2</td></tr>
+<tr><td class="mono-s">aifirstextension-apache-license</td><td class="n better">+9.7</td><td class="n better">+21.3</td></tr>
+<tr><td class="mono-s">aifirstwebsite-guided-install</td><td class="n better">+11.9</td><td class="n better">+8.7</td></tr>
+<tr><td class="mono-s">aifirstwebsite-macos-workaround</td><td class="n better">+19.3</td><td class="n better">+17.0</td></tr>
+<tr><td class="mono-s">aifirstwebsite-signing-policy</td><td class="n better">+19.8</td><td class="n better">+7.5</td></tr>
+<tr><td class="mono-s">bazzite-stale-portal</td><td class="n worse">−5.1</td><td class="n worse">−17.0</td></tr>
+<tr><td class="mono-s">pr10</td><td class="n worse">−3.0</td><td class="n better">+4.7</td></tr>
+<tr><td class="mono-s">pr11</td><td class="n worse">−19.4</td><td class="n better">+8.0</td></tr>
+<tr><td class="mono-s">pr12</td><td class="n better">+1.2</td><td class="n worse">−9.5</td></tr>
+<tr><td class="mono-s">pr5</td><td class="n worse">−8.5</td><td class="n better">+2.1</td></tr>
+<tr><td class="mono-s">pr8</td><td class="n better">+5.9</td><td class="n better">+18.9</td></tr>
+<tr><td class="mono-s">pr9</td><td class="n worse">−0.1</td><td class="n better">+5.2</td></tr>
+<tr><td class="mono-s">prbench-aggregate-only</td><td class="n better">+9.7</td><td class="n better">+0.4</td></tr>
+<tr><td class="mono-s">prbench-compare-systems</td><td class="n better">+19.9</td><td class="n better">+17.0</td></tr>
+<tr><td class="mono-s">prbench-crossjudge</td><td class="n better">+2.9</td><td class="n better">+5.7</td></tr>
+<tr><td class="mono-s">prbench-graph-compare-doc</td><td class="n better">+12.4</td><td class="n worse">−11.8</td></tr>
+<tr><td class="mono-s">prbench-judge-retry</td><td class="n better">+1.5</td><td class="n better">+5.6</td></tr>
+<tr><td class="mono-s">prbench-parallel-providers</td><td class="n better">+3.1</td><td class="n worse">−7.0</td></tr>
+<tr><td class="mono-s">prbench-priced-cost-gate</td><td class="n better">+16.3</td><td class="n better">+1.5</td></tr>
+<tr><td class="mono-s">prbench-scoring</td><td class="n better">+7.8</td><td class="n better">+13.1</td></tr>
+<tr><td class="mono-s">prbench-shell-bookkeeping</td><td class="n better">+7.7</td><td class="n worse">−2.2</td></tr>
+<tr><td class="mono-s">showtail-claude-exit-codes</td><td class="n better">+7.0</td><td class="n better">+3.4</td></tr>
+<tr><td class="mono-s">showtail-docker-tests</td><td class="n better">+9.5</td><td class="n better">+6.7</td></tr>
+<tr><td class="mono-s">showtail-self-upgrade</td><td class="n better">+5.0</td><td class="n worse">−6.5</td></tr>
+<tr><td class="mono-s">showtail-signpath</td><td class="n better">+2.7</td><td class="n better">+0.1</td></tr>
+<tr><td class="mono-s">showtail-transcript-migrator</td><td class="n better">+5.3</td><td class="n better">+1.5</td></tr>
+<tr><td class="mono-s">showtail-windows-cmd</td><td class="n better">+13.0</td><td class="n better">+0.7</td></tr>
+<tr><td class="mono-s">tracetoon-brief-owners-rows</td><td class="n worse">−10.2</td><td class="n better">+18.8</td></tr>
+<tr><td class="mono-s">tracetoon-chained-runs</td><td class="n worse">−3.8</td><td class="n better">+4.9</td></tr>
+<tr><td class="mono-s">tracetoon-cli-guard-tests</td><td class="n better">+6.9</td><td class="n better">+1.0</td></tr>
+<tr><td class="mono-s">tracetoon-evidence-graph</td><td class="n worse">−7.8</td><td class="n better">+9.4</td></tr>
+<tr><td class="mono-s">tracetoon-lean-reviewer</td><td class="n better">+0.5</td><td class="n better">+4.9</td></tr>
+<tr><td class="mono-s">tracetoon-neighborhood</td><td class="n better">+13.2</td><td class="n worse">−2.9</td></tr>
+<tr><td class="mono-s">tracetoon-receipt-quoting</td><td class="n worse">−12.5</td><td class="n worse">−12.7</td></tr>
+<tr><td class="mono-s">tracetoon-render-name-check</td><td class="n better">+4.8</td><td class="n better">+14.1</td></tr>
+<tr><td class="mono-s">tracetoon-review-run-all</td><td class="n better">+0.8</td><td class="n better">+13.7</td></tr>
+<tr><td class="mono-s">tracetoon-sql-row-order</td><td class="n worse">−9.6</td><td class="n worse">−0.9</td></tr>
+<tr><td class="mono-s">tracetoon-update-command</td><td class="n better">+11.0</td><td class="n better">+5.5</td></tr>
+<tr><td class="mono-s">vex-v5-serial-aim-port</td><td class="n better">+10.4</td><td class="n better">+17.8</td></tr>
+<tr><td class="mono-s">vexagent-cli-snap</td><td class="n worse">−2.8</td><td class="n better">+11.2</td></tr>
+<tr><td class="mono-s">vexagent-repl-usb-iface</td><td class="n better">+9.9</td><td class="n worse">−2.4</td></tr>
+<tr><td class="mono-s">vexagent-replug-runs</td><td class="n worse">−2.8</td><td class="n worse">−4.2</td></tr>
+<tr><td class="mono-s">vexagent-skill</td><td class="n worse">−5.1</td><td class="n worse">−6.7</td></tr>
+<tr><td class="mono-s">vexaim</td><td class="n better">+0.2</td><td class="n worse">−25.4</td></tr>
+<tr><td class="mono-s">vexaim-workshop-ci</td><td class="n worse">−1.5</td><td class="n worse">−9.3</td></tr>
+<tr><td class="mono-s">vexaim-workshop-norobot</td><td class="n better">+3.3</td><td class="n worse">−7.9</td></tr>
+<tr><td class="mono-s">winapps-adobe-2026</td><td class="n better">+12.5</td><td class="n better">+6.4</td></tr>
+<tr><td class="mono-s">winapps-sdl-wayland</td><td class="n better">+4.9</td><td class="n better">+13.0</td></tr>
 </tbody></table></div></details>
-<p style="margin-top:28px">The earlier 5-PR report is kept at <a href="evidence-graph.html">evidence-graph.html</a>.</p>
+<p class="small" style="margin-top:20px">Sources: prbench <code>results/v4/pool61-final6</code> (summaries, pairwise judgments, adjudications and the three-way run), tuning gates in <code>results/v4/tuning/r1-c54…r4-c58</code>, panel gates in <code>results/v4/tuning/panel-c61</code> and <code>panel-c62</code>, the earlier full run in <code>results/v4/pool61-final2</code>, end-of-session context from the cases' original session logs. The earlier 5-PR report is kept at <a href="evidence-graph.html">evidence-graph.html</a>.</p>
+</section>
 </main>
 </div>
 
