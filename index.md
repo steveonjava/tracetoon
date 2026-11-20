@@ -11,9 +11,9 @@ write, and there's a comic on top.
 
 | | |
 | --- | --- |
-| **83–34** | judges preferred the evidence-graph PR on Codex |
-| **69–17** | judges preferred it on Claude Code |
-| **−46% / −31%** | cost per PR on Codex / Claude Code |
+| **79–38** | both judges preferred the evidence-graph PR on Codex |
+| **60–21** | both judges preferred it on Claude Code |
+| **−70% / −43%** | cost per PR on Codex / Claude Code |
 
 prbench: 61 real PRs from 12 repositories, each written 3 times by each workflow, 2 AI judges per provider in both orders (732 judgments per provider), factual errors checked by two expert models. Compared with Tracetoon's earlier multi-agent workflow. Full results: https://tracetoon.ai/evidence-graph-61.html
 
